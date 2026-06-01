@@ -1,0 +1,22 @@
+# ── 安全关键：凭据绝不能进仓库 ──────────────────────────────
+**/.credentials.json
+**/*.credentials.json
+.credentials*
+*.key
+*.pem
+*.token
+secrets*
+
+# 锁文件 / 临时
+*.lock
+**/.lock
+**/.highwatermark
+*.tmp
+
+# 操作系统垃圾
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 机器相关、不应同步的设置（只同步 settings/settings.shared.json）
+/settings/settings.local.json
