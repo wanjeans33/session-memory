@@ -25,6 +25,20 @@ fi
 ln -s "$REPO/memory" "$PROJ_MEM"
 echo "✓ 记忆软链接: $PROJ_MEM -> $REPO/memory"
 
+# 技能软链接：~/.claude/skills/<name> -> <repo>/skills/<name>
+if [ -d "$REPO/skills" ]; then
+  mkdir -p "$CLAUDE/skills"
+  for sk in "$REPO"/skills/*/; do
+    [ -d "$sk" ] || continue
+    name="$(basename "$sk")"
+    link="$CLAUDE/skills/$name"
+    [ -L "$link" ] && rm "$link"
+    [ -d "$link" ] && rm -rf "$link"
+    ln -s "${sk%/}" "$link"
+    echo "✓ 技能软链接: $link -> ${sk%/}"
+  done
+fi
+
 # CLAUDE.md import
 USER_MD="$CLAUDE/CLAUDE.md"
 LINE="@$REPO/CLAUDE.md"
@@ -39,12 +53,13 @@ fi
 SETTINGS="$CLAUDE/settings.json"
 START_CMD="bash \"$REPO/scripts/sync.sh\" --pull-only"
 END_CMD="bash \"$REPO/scripts/sync.sh\""
+CAPTURE_CMD="bash \"$REPO/scripts/capture/claude-session-end.sh\""
 if command -v jq >/dev/null 2>&1; then
   [ -f "$SETTINGS" ] && cp "$SETTINGS" "$SETTINGS.bak" || echo '{}' > "$SETTINGS"
   TMP="$(mktemp)"
   jq \
     --slurpfile shared "$REPO/settings/settings.shared.json" \
-    --arg start "$START_CMD" --arg end "$END_CMD" '
+    --arg start "$START_CMD" --arg end "$END_CMD" --arg cap "$CAPTURE_CMD" '
     ($shared[0] + .) as $merged                       # shared 不覆盖已有键
     | $merged
     | .hooks //= {}
@@ -54,6 +69,8 @@ if command -v jq >/dev/null 2>&1; then
         else .hooks.SessionStart += [{hooks:[{type:"command",command:$start}]}] end)
     | (if [.hooks.SessionEnd[].hooks[].command] | index($end) then .
         else .hooks.SessionEnd += [{hooks:[{type:"command",command:$end}]}] end)
+    | (if [.hooks.SessionEnd[].hooks[].command] | index($cap) then .
+        else .hooks.SessionEnd += [{hooks:[{type:"command",command:$cap}]}] end)
   ' "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS"
   echo "✓ 已合并 settings.json 并安装 hooks（备份在 settings.json.bak）"
 else

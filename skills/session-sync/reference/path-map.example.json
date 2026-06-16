@@ -1,0 +1,13 @@
+{
+  "_comment": "OPTIONAL cross-OS path translation map (phase 2 — not yet wired into the sync scripts). Each entry maps the SAME logical project's encoded folder name across machines, so a session backed up on one OS can be restored into the folder name the other OS expects and become resumable with `claude --resume`. The folder name is the absolute project path with `:`, `\\`, `/`, `_`, `.` all replaced by `-`.",
+  "projects": [
+    {
+      "windows": "E--Github-project-draft",
+      "macos": "-Users-jing-Github-project-draft"
+    },
+    {
+      "windows": "E--Github-project-pigraph",
+      "macos": "-Users-jing-Github-project-pigraph"
+    }
+  ]
+}

@@ -39,6 +39,23 @@ if (Test-Path $projMem) {
 cmd /c mklink /J "`"$projMem`"" "`"$repoMem`"" | Out-Null
 Write-Host "✓ 记忆 junction: $projMem -> $repoMem"
 
+# ── 1b) 技能 junction：~/.claude/skills/<name> -> <repo>\skills\<name> ──
+$skillsSrc = Join-Path $Repo 'skills'
+$skillsDst = Join-Path $claude 'skills'
+if (Test-Path $skillsSrc) {
+  New-Item -ItemType Directory -Force -Path $skillsDst | Out-Null
+  foreach ($sk in (Get-ChildItem $skillsSrc -Directory)) {
+    $link = Join-Path $skillsDst $sk.Name
+    if (Test-Path $link) {
+      $li = Get-Item $link -Force
+      if ($li.LinkType) { cmd /c rmdir "`"$link`"" | Out-Null }
+      else { Remove-Item $link -Recurse -Force }   # 旧真实目录：用仓库版本覆盖
+    }
+    cmd /c mklink /J "`"$link`"" "`"$($sk.FullName)`"" | Out-Null
+    Write-Host "✓ 技能 junction: $link -> $($sk.FullName)"
+  }
+}
+
 # ── 2) CLAUDE.md @import ─────────────────────────────────────
 $userMd     = Join-Path $claude 'CLAUDE.md'
 $importLine = "@$RepoFwd/CLAUDE.md"
@@ -97,6 +114,10 @@ function Add-Hook($hooks, $event, $command) {
 }
 $settings['hooks'] = Add-Hook $settings['hooks'] 'SessionStart' $startCmd
 $settings['hooks'] = Add-Hook $settings['hooks'] 'SessionEnd'   $endCmd
+
+# 采集 hook：每次会话结束，把本会话抽成 digest + 脱敏原文写进【该项目】session-history/
+$captureCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/capture/claude-session-end.ps1`""
+$settings['hooks'] = Add-Hook $settings['hooks'] 'SessionEnd' $captureCmd
 
 $settings | ConvertTo-Json -Depth 12 | Set-Content -Path $settingsPath -Encoding UTF8
 Write-Host "✓ 已合并 settings.json 并安装 hooks（备份在 settings.json.bak）"
