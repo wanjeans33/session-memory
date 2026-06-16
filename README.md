@@ -104,8 +104,14 @@ iPhone 上**没有本地 Claude Code**，两条可用路径：
 
 - **采集**：每次会话结束，hook 把该会话抽成一条 **digest**（分支/worktree/commit、改了哪些文件、
   首条 prompt、工具统计）+ **脱敏后的原文**，写进**该项目自己**的 `session-history/` 目录。
-  - Claude Code CLI：`SessionEnd` hook → `scripts/capture/claude-session-end.*`（安装脚本自动挂上）。
+  - Claude Code CLI：`SessionEnd` hook → `scripts/capture/claude-session-end.*`。
   - Codex CLI：无 hook，跑 `scripts/capture/codex-scrape.*` 增量扫 `~/.codex/sessions/`（手动 / 定时 / `config.toml` 的 notify）。
+
+  **采集范围（开关）**：
+  - **全局**（默认）：`install-windows.ps1`（或 `bash install-mac.sh`）一次装好，**所有项目**会话结束都采集。省事，但每个用过的 repo 都会冒出 `session-history/`。
+  - **按 repo**：`install-windows.ps1 -CaptureScope repo`（Mac：`CAPTURE_SCOPE=repo bash install-mac.sh`）不装全局 hook；想启用的仓库各自跑一次
+    `scripts/enable-capture-here.ps1`（Mac：`enable-capture-here.sh`），hook 写进**该仓库**的 `.claude/settings.local.json`（本地、不提交）。干净可控。
+    关闭：加 `-Remove`（Mac：`--remove`）。
 - **综合**：`session-share` 技能读 `session-history/` + 分支/worktree 索引 + `memory/`，
   生成 `STATUS.md`：哪条分支在做什么、最近哪些会话碰过、未完成线索、建议下一步。
   - 直接问 Claude：「这个项目做到哪了 / 各分支在干什么 / 生成项目状态」。

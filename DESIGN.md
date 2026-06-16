@@ -50,6 +50,11 @@
 - 默认：文件出现在工作树里，随你下次正常 commit 带走；或由 `session-share` 技能统一 commit。
 - 可选自动提交：设环境变量 `SESSION_HISTORY_AUTOCOMMIT=1` 时，采集脚本只 `git add session-history/` 后单独提交（绝不 `add -A`）。
 
+**采集范围（开关）：** Claude CLI 采集 hook 装在哪决定它对哪些项目生效——
+- **global**（默认）：写进用户级 `~/.claude/settings.json`，对**所有**项目会话生效（`install-* -CaptureScope global` / `CAPTURE_SCOPE=global`）。
+- **repo**：不装全局 hook；由 `scripts/enable-capture-here.*` 把 hook 写进**单个仓库**的 `.claude/settings.local.json`（本地、不提交，含本机绝对路径）。
+两者互斥（避免一次会话采两条）；切到 global 时安装脚本会清掉自己之前可能装的全局采集 hook 的重复项。
+
 ---
 
 ## 3. 统一 session digest schema
