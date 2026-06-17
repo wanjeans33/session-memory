@@ -7,7 +7,12 @@
     4) 安装 hooks：SessionStart 拉取 / SessionEnd 归档并推送
   幂等：可重复运行。修改 settings.json 前会自动备份为 settings.json.bak。
   junction 无需管理员权限。
+.PARAMETER CaptureScope
+  会话采集 hook 的范围：
+    global（默认）= 装进全局 settings.json，所有项目会话结束都采集（省事，但到处生成 session-history/）；
+    repo          = 不装全局采集 hook，改由各仓库自己跑 scripts\enable-capture-here.ps1 启用（干净可控）。
 #>
+param([ValidateSet('global','repo')][string]$CaptureScope = 'global')
 $ErrorActionPreference = 'Stop'
 $Repo    = Split-Path -Parent $PSScriptRoot
 $RepoFwd = $Repo -replace '\\', '/'
@@ -38,6 +43,23 @@ if (Test-Path $projMem) {
 }
 cmd /c mklink /J "`"$projMem`"" "`"$repoMem`"" | Out-Null
 Write-Host "✓ 记忆 junction: $projMem -> $repoMem"
+
+# ── 1b) 技能 junction：~/.claude/skills/<name> -> <repo>\skills\<name> ──
+$skillsSrc = Join-Path $Repo 'skills'
+$skillsDst = Join-Path $claude 'skills'
+if (Test-Path $skillsSrc) {
+  New-Item -ItemType Directory -Force -Path $skillsDst | Out-Null
+  foreach ($sk in (Get-ChildItem $skillsSrc -Directory)) {
+    $link = Join-Path $skillsDst $sk.Name
+    if (Test-Path $link) {
+      $li = Get-Item $link -Force
+      if ($li.LinkType) { cmd /c rmdir "`"$link`"" | Out-Null }
+      else { Remove-Item $link -Recurse -Force }   # 旧真实目录：用仓库版本覆盖
+    }
+    cmd /c mklink /J "`"$link`"" "`"$($sk.FullName)`"" | Out-Null
+    Write-Host "✓ 技能 junction: $link -> $($sk.FullName)"
+  }
+}
 
 # ── 2) CLAUDE.md @import ─────────────────────────────────────
 $userMd     = Join-Path $claude 'CLAUDE.md'
@@ -98,7 +120,28 @@ function Add-Hook($hooks, $event, $command) {
 $settings['hooks'] = Add-Hook $settings['hooks'] 'SessionStart' $startCmd
 $settings['hooks'] = Add-Hook $settings['hooks'] 'SessionEnd'   $endCmd
 
+# 采集 hook：每次会话结束，把本会话抽成 digest + 脱敏原文写进【该项目】session-history/
+$captureCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/capture/claude-session-end.ps1`""
+if ($CaptureScope -eq 'global') {
+  $settings['hooks'] = Add-Hook $settings['hooks'] 'SessionEnd' $captureCmd
+} else {
+  # repo 范围：确保全局没有这条采集 hook（避免和按 repo 的重复）
+  foreach ($ev in @('SessionEnd')) {
+    if ($settings['hooks'].ContainsKey($ev)) {
+      $settings['hooks'][$ev] = @($settings['hooks'][$ev] | Where-Object {
+        $cmds = @($_.hooks | ForEach-Object { $_.command }); -not ($cmds -contains $captureCmd)
+      })
+    }
+  }
+}
+
 $settings | ConvertTo-Json -Depth 12 | Set-Content -Path $settingsPath -Encoding UTF8
 Write-Host "✓ 已合并 settings.json 并安装 hooks（备份在 settings.json.bak）"
+if ($CaptureScope -eq 'global') {
+  Write-Host "✓ 采集范围：global —— 所有项目会话结束都会生成 session-history/"
+} else {
+  Write-Host "• 采集范围：repo —— 未装全局采集 hook。在想启用的仓库里运行："
+  Write-Host "    powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/enable-capture-here.ps1`""
+}
 Write-Host ""
 Write-Host "完成。新开一个 Claude Code 会话即可生效。"
