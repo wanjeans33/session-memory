@@ -114,6 +114,7 @@ iPhone 上**没有本地 Claude Code**，两条可用路径：
   首条 prompt、工具统计）+ **脱敏后的原文**，写进**该项目自己**的 `session-history/` 目录。
   - Claude Code CLI：`SessionEnd` hook → `scripts/session-history/capture/claude-session-end.*`。
   - Codex CLI：无 hook，跑 `scripts/session-history/capture/codex-scrape.*` 增量扫 `~/.codex/sessions/`（手动 / 定时 / `config.toml` 的 notify）。
+  - Claude Desktop：无 hook，跑 `scripts/session-history/capture/desktop-scrape.*` 扫 `%APPDATA%\Claude\claude-code-sessions\`（按 `cliSessionId` 找到真 transcript，用 `title`/分支增强；对已被 CLI hook 采过的同会话自动去重）。
 
   **采集范围（开关）**：
   - **全局**（默认）：`install-windows.ps1`（或 `bash install-mac.sh`）一次装好，**所有项目**会话结束都采集。省事，但每个用过的 repo 都会冒出 `session-history/`。
