@@ -9,7 +9,7 @@ description: 综合一个项目的会话历史(session-history/) + 分支/worktr
 digest，结合仓库的**分支 / worktree 状态**与 `memory/`，产出一份人读的 `STATUS.md`：
 **哪条分支/worktree 在做什么、最近哪些会话碰过、未完成线索、建议下一步。**
 
-> 数据怎么进来的：各端的采集 hook（见仓库 `scripts/capture/`）在会话结束时把 digest 写进
+> 数据怎么进来的：各端的采集 hook（见仓库 `scripts/session-history/capture/`）在会话结束时把 digest 写进
 > `session-history/digests/`，脱敏原文写进 `session-history/transcripts/`。本技能只**消费**这些数据。
 
 ## 步骤
@@ -17,13 +17,13 @@ digest，结合仓库的**分支 / worktree 状态**与 `memory/`，产出一份
 1. **定位项目**：在目标项目仓库内运行（worktree 也可，脚本会自动汇聚到主工作树根）。
 
 2. **刷新分支/worktree 索引**：
-   - Windows：`powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>/scripts/repo-status.ps1"`
-   - macOS/Linux：`bash "<repo>/scripts/repo-status.sh"`
+   - Windows：`powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>/scripts/session-history/repo-status.ps1"`
+   - macOS/Linux：`bash "<repo>/scripts/session-history/repo-status.sh"`
    生成 `session-history/index.json`。
 
 3. **取汇聚数据**（按分支分组、含每会话关键字段，避免逐个读 digest）：
-   - Windows：`powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>/scripts/build-status.ps1" [-Days N]`
-   - macOS/Linux：`bash "<repo>/scripts/build-status.sh" [N]`
+   - Windows：`powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>/scripts/session-history/build-status.ps1" [-Days N]`
+   - macOS/Linux：`bash "<repo>/scripts/session-history/build-status.sh" [N]`
    stdout 是紧凑 JSON：`{ index, branches:[{branch, session_count, sessions:[…]}] }`。
 
 4. **读 `memory/MEMORY.md`**（及相关事实文件）拿稳定背景。

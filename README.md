@@ -1,7 +1,7 @@
 # claude-session-memory
 
 跨 **Mac / Windows / iPhone** 同步 Claude Code 的「记忆」：规则与偏好（`CLAUDE.md`）、累积的
-记忆事实（`memory/`）、以及作为归档的历史会话记录（`sessions/`）。
+记忆事实（`memory/`）。此外还把各端会话沉淀成**按项目的进度记录**（`session-history/`，见「多端会话历史」）。
 
 核心思路：**用一个私有 git 仓库作为唯一可信源**，通过软链接 / 目录联接（junction）让 Claude Code
 **就地**读写这些文件；git 负责跨机同步。这也是唯一能覆盖到 iPhone 的方式（见下文）。
@@ -17,13 +17,13 @@
 | `CLAUDE.md`（规则/偏好） | ✅ | 各机器 `~/.claude/CLAUDE.md` 通过 `@import` 引用 |
 | `memory/`（MEMORY.md + 事实文件） | ✅ | 软链接/junction 到本仓库 |
 | `settings/settings.shared.json` | ⚠️ | 精选、可移植的设置，合并进本机 settings.json |
-| `sessions/`（`*.jsonl`） | ⚠️ | **仅作归档/检索**，跨系统**无法自动 `--resume`**（见下） |
+| `session-history/`（各项目内） | ⚠️ | 按项目的会话 digest + 脱敏原文，进**目标项目**仓库，非本仓库 |
 | 凭据 `.credentials.json` | ❌ | 永不同步 |
 
-### 为什么会话记录不能跨系统 resume
-每个操作系统会把项目绝对路径编码成不同的文件夹名（`E:\proj` → `E--proj` vs `/Users/x/proj`），
-且记录内部嵌入了绝对路径。所以同一段对话在另一台机器/系统上无法被 Claude Code 识别为可继续的会话。
-我们只把它们当作**可搜索的历史归档**保存在 `sessions/<os>/` 下。
+### 为什么不做跨系统 resume
+每个操作系统把项目绝对路径编码成不同文件夹名（`E:\proj` → `E--proj` vs `/Users/x/proj`），
+且记录内嵌绝对路径，所以同一段对话在另一台机器/系统上无法被 Claude Code 识别为可继续会话。
+因此我们不追求"实时 resume"，而是把每次会话沉淀成**可检索的进度 digest**（见「多端会话历史」）。
 
 ---
 
@@ -52,16 +52,18 @@ bash scripts/install-mac.sh        # 需要 jq 才能自动合并 settings/hooks
 1. 把 `~/.claude/projects/<编码项目名>/memory` 链接到本仓库 `memory/`；
 2. 在 `~/.claude/CLAUDE.md` 写入一行 `@<仓库>/CLAUDE.md` 引用全局规则；
 3. 把 `settings/settings.shared.json` 合并进 `~/.claude/settings.json`（修改前自动备份为 `.bak`）；
-4. 安装 hooks：**SessionStart** 拉取最新、**SessionEnd** 归档会话并提交推送。
+4. 链接 `skills/` 下技能到 `~/.claude/skills/`；
+5. 安装 hooks：**SessionStart** 拉取记忆仓库、**SessionEnd** 同步记忆仓库并采集本次会话
+   （采集范围 global/repo 见「多端会话历史」）。
 
 ---
 
 ## 日常使用
-- 平时**无需手动操作**：开会话时自动 `git pull`，结束时自动归档 + `commit` + `push`。
+- 平时**无需手动操作**：开会话时自动 `git pull`，结束时自动 `commit` + `push` 记忆仓库，并采集本次会话。
 - 记忆与规则的写入会随 `memory/`、`CLAUDE.md` 一起被提交。
-- 手动兜底（任何时候都能跑）：
-  - Windows：`powershell -File scripts\sync.ps1`
-  - macOS：`bash scripts/sync.sh`
+- 手动兜底（同步记忆仓库，任何时候都能跑）：
+  - Windows：`powershell -File scripts\memory-sync\sync.ps1`
+  - macOS：`bash scripts/memory-sync/sync.sh`
 - 让记忆对**所有项目**生效：`~/.claude/CLAUDE.md` 的 import 已实现全局加载（其中又 import 了
   `memory/MEMORY.md`）。
 
@@ -86,15 +88,21 @@ iPhone 上**没有本地 Claude Code**，两条可用路径：
 ├── CLAUDE.md                 # 全局规则/偏好（被同步）
 ├── DESIGN.md                 # 多端会话记忆系统的架构与 digest schema
 ├── memory/                   # 文件式记忆：MEMORY.md 索引 + 每条事实一个文件
-├── sessions/{windows,mac}/   # 旧：全局会话归档（只读/检索）
 ├── settings/settings.shared.json
-├── skills/                   # 被同步的技能：session-sync（备份）、session-share（项目状态）
+├── skills/
+│   └── session-share/        # 技能：综合会话历史 + 分支状态 + 记忆 → 项目状态
 └── scripts/
-    ├── install-* / sync.* / archive-*     # 记忆仓库的安装与同步
-    ├── capture/               # 采集适配器：claude-session-end / codex-scrape / _lib
-    ├── repo-status.*          # 枚举分支/worktree -> session-history/index.json
-    └── build-status.*         # 汇聚 digests 按分支分组（供 session-share 消费）
+    ├── install-windows.ps1 / install-mac.sh    # 安装入口（接两套子系统）
+    ├── memory-sync/          # ① 记忆同步：sync.*（拉取/提交/推送本仓库）
+    └── session-history/      # ② 会话历史
+        ├── capture/          #    采集适配器：claude-session-end / codex-scrape / _lib
+        ├── repo-status.*     #    枚举分支/worktree → session-history/index.json
+        ├── build-status.*    #    汇聚 digests 按分支分组（供 session-share 消费）
+        └── enable-capture-here.*  # 按 repo 启用/关闭采集
 ```
+
+> 两个子系统：**① 记忆同步**（CLAUDE.md + memory，跨机共享稳定规则/事实）与
+> **② 会话历史**（按项目沉淀进度，供 session-share 综合）。各自独立。
 
 ---
 
@@ -104,13 +112,13 @@ iPhone 上**没有本地 Claude Code**，两条可用路径：
 
 - **采集**：每次会话结束，hook 把该会话抽成一条 **digest**（分支/worktree/commit、改了哪些文件、
   首条 prompt、工具统计）+ **脱敏后的原文**，写进**该项目自己**的 `session-history/` 目录。
-  - Claude Code CLI：`SessionEnd` hook → `scripts/capture/claude-session-end.*`。
-  - Codex CLI：无 hook，跑 `scripts/capture/codex-scrape.*` 增量扫 `~/.codex/sessions/`（手动 / 定时 / `config.toml` 的 notify）。
+  - Claude Code CLI：`SessionEnd` hook → `scripts/session-history/capture/claude-session-end.*`。
+  - Codex CLI：无 hook，跑 `scripts/session-history/capture/codex-scrape.*` 增量扫 `~/.codex/sessions/`（手动 / 定时 / `config.toml` 的 notify）。
 
   **采集范围（开关）**：
   - **全局**（默认）：`install-windows.ps1`（或 `bash install-mac.sh`）一次装好，**所有项目**会话结束都采集。省事，但每个用过的 repo 都会冒出 `session-history/`。
   - **按 repo**：`install-windows.ps1 -CaptureScope repo`（Mac：`CAPTURE_SCOPE=repo bash install-mac.sh`）不装全局 hook；想启用的仓库各自跑一次
-    `scripts/enable-capture-here.ps1`（Mac：`enable-capture-here.sh`），hook 写进**该仓库**的 `.claude/settings.local.json`（本地、不提交）。干净可控。
+    `scripts/session-history/enable-capture-here.ps1`（Mac：`enable-capture-here.sh`），hook 写进**该仓库**的 `.claude/settings.local.json`（本地、不提交）。干净可控。
     关闭：加 `-Remove`（Mac：`--remove`）。
 - **综合**：`session-share` 技能读 `session-history/` + 分支/worktree 索引 + `memory/`，
   生成 `STATUS.md`：哪条分支在做什么、最近哪些会话碰过、未完成线索、建议下一步。

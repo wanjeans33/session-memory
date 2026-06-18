@@ -7,12 +7,13 @@ metadata:
 
 `claude-session-memory` 除同步记忆外，还实现了**多端 Agent 会话历史系统**（架构见仓库 `DESIGN.md`）。
 
-- 采集适配器在 `scripts/capture/`：`claude-session-end`（Claude CLI 的 SessionEnd hook）、
+- 采集适配器在 `scripts/session-history/capture/`：`claude-session-end`（Claude CLI 的 SessionEnd hook）、
   `codex-scrape`（扫 `~/.codex/sessions/` 的 rollout，增量游标 `~/.claude/.codex-scrape-cursor`）、
   `_lib`（脱敏 + git 信息 + 写 digest）。
 - 每会话产出一条统一 digest（schema 见 DESIGN.md §3）+ 脱敏原文，写进**目标项目自己**的
   `session-history/{digests,transcripts}/`（汇聚到主工作树根）。
-- `scripts/repo-status` 出分支/worktree 索引；`scripts/build-status` 按分支聚合。
+- `scripts/session-history/repo-status` 出分支/worktree 索引；`scripts/session-history/build-status` 按分支聚合。
+- 旧的全量归档（archive-sessions）与 session-sync 技能已删除，统一由 capture 收口。
 - `skills/session-share` 技能读 digests+索引+memory → 生成 `STATUS.md`（项目进度）。
 
 **状态（2026-06-17）**：Windows(.ps1) 已端到端验证；macOS(.sh) 依赖 jq/perl，**尚未验证**。
