@@ -26,6 +26,8 @@ $cursor = 0L
 if (-not $All -and (Test-Path $cursorFile)) { try { $cursor = [long](Get-Content $cursorFile -Raw).Trim() } catch { $cursor = 0L } }
 
 function ToIso([long]$ms) { if ($ms -le 0) { return $null }; return [DateTimeOffset]::FromUnixTimeMilliseconds($ms).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ') }
+# StrictMode 下安全取属性（元数据字段可能缺失）
+function Get-Prop($o, [string]$n) { if ($null -ne $o -and $o.PSObject.Properties[$n]) { return $o.$n } return $null }
 
 $metaFiles = Get-ChildItem $SessionsDir -Recurse -Filter 'local_*.json' -File | Sort-Object LastWriteTime
 $newCursor = $cursor; $written = 0; $skipped = 0; $deduped = 0; $byProject = @{}
@@ -36,10 +38,12 @@ foreach ($mf in $metaFiles) {
   if ($ticks -gt $newCursor) { $newCursor = $ticks }
 
   try { $m = Get-Content $mf.FullName -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
-  $cliId = $m.cliSessionId
+  $cliId = Get-Prop $m 'cliSessionId'
   if (-not $cliId) { continue }
-  $cwd = if ($m.worktreePath) { $m.worktreePath } else { $m.cwd }
+  $wtPath = Get-Prop $m 'worktreePath'
+  $cwd = if ($wtPath) { $wtPath } else { Get-Prop $m 'cwd' }
   if (-not $cwd) { continue }
+  $mBranch = Get-Prop $m 'branch'; $mTitle = Get-Prop $m 'title'
 
   $g = Get-GitInfo $cwd
   if (-not $g.main_root) { $skipped++; continue }
@@ -53,8 +57,10 @@ foreach ($mf in $metaFiles) {
 
   # 找 transcript
   $tr = Get-ChildItem $ProjectsDir -Recurse -Filter "$cliId.jsonl" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-  $redacted = $null; $rel = @(); $tools = @{}; $turns = $m.completedTurns; $firstPrompt = $m.title
-  $started = ToIso ([long]$m.createdAt); $ended = ToIso ([long]$m.lastActivityAt); $version = $null
+  $ct = Get-Prop $m 'completedTurns'; if ($null -eq $ct) { $ct = 0 }
+  $createdMs = Get-Prop $m 'createdAt'; $lastMs = Get-Prop $m 'lastActivityAt'
+  $redacted = $null; $rel = @(); $tools = @{}; $turns = $ct; $firstPrompt = $mTitle
+  $started = ToIso ([long]($createdMs)); $ended = ToIso ([long]($lastMs)); $version = $null
 
   if ($tr) {
     $lines = [System.IO.File]::ReadAllLines($tr.FullName, [System.Text.Encoding]::UTF8)
@@ -70,7 +76,7 @@ foreach ($mf in $metaFiles) {
     $redacted = $lines | ForEach-Object { Get-RedactedText $_ }
   }
   # 元数据分支最权威（worktree/分支由 Desktop 记录）
-  if ($m.branch -and $m.branch -ne 'HEAD') { $g.branch = $m.branch }
+  if ($mBranch -and $mBranch -ne 'HEAD') { $g.branch = $mBranch }
 
   $fpTrunc = $null
   if ($firstPrompt) { $rp = Get-RedactedText ([string]$firstPrompt); $fpTrunc = $rp.Substring(0,[Math]::Min(200,$rp.Length)) }
@@ -81,7 +87,7 @@ foreach ($mf in $metaFiles) {
     cwd=($cwd -replace '\\','/')
     git=[ordered]@{ branch=$g.branch; is_worktree=$g.is_worktree; worktree=$g.worktree; head=$g.head; dirty=$g.dirty }
     started_at=$started; ended_at=$ended; turns=$turns
-    first_prompt=$fpTrunc; title=$m.title
+    first_prompt=$fpTrunc; title=$mTitle
     summary=''; files_touched=$rel; tools_used=$tools; next_steps=@()
     cli_version=$version; transcript_ref=$null
   }
