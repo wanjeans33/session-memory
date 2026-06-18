@@ -52,7 +52,7 @@
 
 **采集范围（开关）：** Claude CLI 采集 hook 装在哪决定它对哪些项目生效——
 - **global**（默认）：写进用户级 `~/.claude/settings.json`，对**所有**项目会话生效（`install-* -CaptureScope global` / `CAPTURE_SCOPE=global`）。
-- **repo**：不装全局 hook；由 `scripts/enable-capture-here.*` 把 hook 写进**单个仓库**的 `.claude/settings.local.json`（本地、不提交，含本机绝对路径）。
+- **repo**：不装全局 hook；由 `scripts/session-history/enable-capture-here.*` 把 hook 写进**单个仓库**的 `.claude/settings.local.json`（本地、不提交，含本机绝对路径）。
 两者互斥（避免一次会话采两条）；切到 global 时安装脚本会清掉自己之前可能装的全局采集 hook 的重复项。
 
 ---
@@ -81,7 +81,7 @@
   "turns": 12,                     // 用户回合数（粗略）
   "first_prompt": "嗯我现在想明白这一个架构…",   // 截断到 ~200 字
   "summary": "",                   // 一句话；采集时留空，由技能懒生成
-  "files_touched": ["scripts/sync.ps1", "DESIGN.md"],
+  "files_touched": ["scripts/memory-sync/sync.ps1", "DESIGN.md"],
   "tools_used": {"Edit": 9, "Bash": 4, "Write": 3},
   "next_steps": [],                // 可由技能填
   "transcript_ref": "session-history/transcripts/2026-06-17_153012-claude-18f57795.jsonl"
@@ -92,6 +92,7 @@
 - Claude CLI：transcript 每行内嵌 `cwd`/`gitBranch`/`sessionId`/`timestamp`；`files_touched` 来自 `assistant` 行
   里 `tool_use`（`Edit`/`Write`/`NotebookEdit`）的 `input.file_path`；`first_prompt` = 第一条非 meta 的 user 文本。
 - Codex：首行 `session_meta.payload` 给 `id`/`cwd`/`timestamp`/`originator`；`git.*` 用 `cwd` 现算（best-effort）。
+- Desktop：`local_*.json` 元数据给 `cliSessionId`/`cwd`/`branch`/`title`/`completedTurns`；按 `cliSessionId` 找到真 transcript 后复用 Claude 解析。digest 额外带 `title` 字段。
 
 ---
 
@@ -99,10 +100,10 @@
 
 | 端 | 原始存储 | 触发 | 采集脚本 |
 |---|---|---|---|
-| **Claude Code CLI** | `~/.claude/projects/<encoded>/*.jsonl` | `SessionEnd` hook（stdin 给 `transcript_path`/`cwd`/`session_id`） | `scripts/capture/claude-session-end.{ps1,sh}` |
-| **Codex CLI** | `~/.codex/sessions/Y/M/D/rollout-*.jsonl` | 无 hook → `config.toml` 的 `notify`，或手动/定时 | `scripts/capture/codex-scrape.{ps1,sh}`（按 mtime 增量，游标存 `~/.claude/.codex-scrape-cursor`） |
-| **Claude Desktop** | AppData / App Support（独立） | 无 hook → 按需 scrape | （Phase 5）`scripts/capture/desktop-scrape.*` |
-| **Cloud / local** | 云端 VM，克隆本仓 | committed `Stop` hook | （Phase 5） |
+| **Claude Code CLI** | `~/.claude/projects/<encoded>/*.jsonl` | `SessionEnd` hook（stdin 给 `transcript_path`/`cwd`/`session_id`） | `scripts/session-history/capture/claude-session-end.{ps1,sh}` |
+| **Codex CLI** | `~/.codex/sessions/Y/M/D/rollout-*.jsonl` | 无 hook → `config.toml` 的 `notify`，或手动/定时 | `scripts/session-history/capture/codex-scrape.{ps1,sh}`（按 mtime 增量，游标存 `~/.claude/.codex-scrape-cursor`） |
+| **Claude Desktop** | `%APPDATA%\Claude\claude-code-sessions\**\local_*.json`（元数据：cliSessionId/cwd/branch/title…）+ 真 transcript 在 `~/.claude/projects/<encoded>/<cliSessionId>.jsonl` | 无 hook → 按需 scrape | `scripts/session-history/capture/desktop-scrape.{ps1,sh}`（按 cliSessionId 找 transcript，复用 Claude 解析，用 title/branch 增强；对已被 CLI hook 采过的同会话去重；游标 `~/.claude/.desktop-scrape-cursor`） |
+| **Cloud / local** | 云端 VM，克隆本仓 | committed `Stop` hook | （Phase 5，未做） |
 | **iPhone** | 无本地（Remote Control 跑在宿主机） | 跟随宿主机 | 归到宿主机那台，不单独采集 |
 
 > 不追求"跨端实时 resume"——各 OS 把项目绝对路径编码成不同文件夹名，且记录内嵌绝对路径，技术上做不到。
@@ -126,7 +127,7 @@
 
 ## 6. 分支 / worktree 状态索引
 
-`scripts/repo-status.{ps1,sh}` 对给定仓库输出 `index.json`：
+`scripts/session-history/repo-status.{ps1,sh}` 对给定仓库输出 `index.json`：
 
 ```jsonc
 {
@@ -161,14 +162,12 @@
 
 ## 8. 路线图
 
-- **Phase 0** 收口与版本化：skill 进仓库；建 `scripts/capture/`；install 改为 link skills + 挂 hook。
+- **Phase 0** 收口与版本化：skill 进仓库；建 `scripts/session-history/capture/`；install 改为 link skills + 挂 hook。
 - **Phase 1** Claude CLI 采集 + 脱敏。
 - **Phase 2** `repo-status` 分支/worktree 索引。
 - **Phase 3** `session-share` 综合技能。
 - **Phase 4** Codex 适配器。
-- **Phase 5** Desktop + Cloud 适配器。
+- **Phase 5** Desktop 适配器 ✅（`desktop-scrape`）；Cloud 适配器（committed `Stop` hook）未做。
 - **Phase 6** 硬化：密钥扫描 CI、跨 OS path-map、并发回归。
 
-> 首批交付：Phase 0/1/2/3/4（2 与 3 强绑定）。
-</content>
-</invoke>
+> 已交付：Phase 0–5（Desktop 已含；Cloud 待做）。

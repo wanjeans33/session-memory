@@ -53,9 +53,9 @@ fi
 
 # settings.json 合并 + hooks（需要 jq）
 SETTINGS="$CLAUDE/settings.json"
-START_CMD="bash \"$REPO/scripts/sync.sh\" --pull-only"
-END_CMD="bash \"$REPO/scripts/sync.sh\""
-CAPTURE_CMD="bash \"$REPO/scripts/capture/claude-session-end.sh\""
+START_CMD="bash \"$REPO/scripts/memory-sync/sync.sh\" --pull-only"
+END_CMD="bash \"$REPO/scripts/memory-sync/sync.sh\""
+CAPTURE_CMD="bash \"$REPO/scripts/session-history/capture/claude-session-end.sh\""
 # 采集范围：global（默认，所有项目）/ repo（不装全局，用 enable-capture-here.sh 按仓库启用）
 SCOPE="${CAPTURE_SCOPE:-global}"
 ADDCAP=true; [ "$SCOPE" = repo ] && ADDCAP=false
@@ -85,7 +85,7 @@ if command -v jq >/dev/null 2>&1; then
   if [ "$ADDCAP" = true ]; then
     echo "✓ 采集范围：global —— 所有项目会话结束都会生成 session-history/"
   else
-    echo "• 采集范围：repo —— 未装全局采集 hook。在想启用的仓库里运行：bash \"$REPO/scripts/enable-capture-here.sh\""
+    echo "• 采集范围：repo —— 未装全局采集 hook。在想启用的仓库里运行：bash \"$REPO/scripts/session-history/enable-capture-here.sh\""
   fi
 else
   echo "⚠ 未找到 jq，跳过 settings/hooks 合并。请手动安装 jq（brew install jq）后重跑，或手动编辑 ~/.claude/settings.json。"

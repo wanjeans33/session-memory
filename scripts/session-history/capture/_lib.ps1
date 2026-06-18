@@ -51,6 +51,55 @@ function Get-OsName {
   return 'linux'
 }
 
+# 解析 Claude transcript（jsonl 行数组）→ 关键字段。Claude CLI 与 Desktop 共用同一 transcript 格式。
+function Get-ClaudeTranscriptInfo([string[]]$lines) {
+  $r = @{ id=$null; started_at=$null; ended_at=$null; branch=$null; cwd=$null; version=$null; turns=0; first_prompt=$null; files=@(); tools=@{} }
+  $set = New-Object System.Collections.Generic.HashSet[string]
+  $editTools = @('Edit','Write','MultiEdit','NotebookEdit')
+  foreach ($ln in $lines) {
+    if (-not $ln.Trim()) { continue }
+    try { $o = $ln | ConvertFrom-Json } catch { continue }
+    if ($o.PSObject.Properties.Name -contains 'timestamp' -and $o.timestamp) { if (-not $r.started_at) { $r.started_at = $o.timestamp }; $r.ended_at = $o.timestamp }
+    if ($o.PSObject.Properties.Name -contains 'sessionId' -and $o.sessionId -and -not $r.id) { $r.id = $o.sessionId }
+    if ($o.PSObject.Properties.Name -contains 'gitBranch' -and $o.gitBranch -and -not $r.branch) { $r.branch = $o.gitBranch }
+    if ($o.PSObject.Properties.Name -contains 'cwd' -and $o.cwd -and -not $r.cwd) { $r.cwd = $o.cwd }
+    if ($o.PSObject.Properties.Name -contains 'version' -and $o.version -and -not $r.version) { $r.version = $o.version }
+    if ($o.type -eq 'user' -and $o.message -and $o.message.role -eq 'user') {
+      $c = $o.message.content; $text = $null
+      if ($c -is [string]) { $text = $c }
+      elseif ($c) {
+        $isTR = $false
+        foreach ($it in $c) { if ($it.type -eq 'tool_result') { $isTR = $true }; if ($it.type -eq 'text' -and -not $text) { $text = $it.text } }
+        if ($isTR) { $text = $null }
+      }
+      if ($text -and -not ($text.StartsWith('<'))) { $r.turns++; if (-not $r.first_prompt) { $r.first_prompt = $text } }
+    }
+    if ($o.type -eq 'assistant' -and $o.message -and $o.message.content) {
+      foreach ($it in $o.message.content) {
+        if ($it.type -eq 'tool_use') {
+          $n = $it.name
+          if ($n) { if ($r.tools.ContainsKey($n)) { $r.tools[$n]++ } else { $r.tools[$n] = 1 } }
+          if ($editTools -contains $n -and $it.input -and $it.input.file_path) { [void]$set.Add([string]$it.input.file_path) }
+        }
+      }
+    }
+  }
+  $r.files = @($set)
+  return $r
+}
+
+# files 绝对路径 -> 相对 $root（正斜杠）
+function ConvertTo-RelFiles($files, [string]$root) {
+  $rr = ($root -replace '\\','/')
+  $out = @()
+  foreach ($f in $files) {
+    $fp = $f -replace '\\','/'
+    if ($fp.ToLower().StartsWith($rr.ToLower())) { $fp = $fp.Substring($rr.Length).TrimStart('/') }
+    $out += $fp
+  }
+  return $out
+}
+
 # ── 写 digest + 脱敏 transcript 到目标项目 session-history/ ─────
 # $digest: hashtable；$redactedLines: string[]（已脱敏的 transcript 行，可为 $null 表示不存原文）
 function Write-SessionDigest {

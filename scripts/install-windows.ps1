@@ -102,8 +102,8 @@ if (Test-Path $sharedPath) {
 }
 
 # 安装 hooks（幂等：按 command 字符串去重）
-$startCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/sync.ps1`" -PullOnly"
-$endCmd   = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/sync.ps1`""
+$startCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/memory-sync/sync.ps1`" -PullOnly"
+$endCmd   = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/memory-sync/sync.ps1`""
 if (-not $settings.ContainsKey('hooks')) { $settings['hooks'] = @{} }
 
 function Add-Hook($hooks, $event, $command) {
@@ -121,7 +121,7 @@ $settings['hooks'] = Add-Hook $settings['hooks'] 'SessionStart' $startCmd
 $settings['hooks'] = Add-Hook $settings['hooks'] 'SessionEnd'   $endCmd
 
 # 采集 hook：每次会话结束，把本会话抽成 digest + 脱敏原文写进【该项目】session-history/
-$captureCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/capture/claude-session-end.ps1`""
+$captureCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/session-history/capture/claude-session-end.ps1`""
 if ($CaptureScope -eq 'global') {
   $settings['hooks'] = Add-Hook $settings['hooks'] 'SessionEnd' $captureCmd
 } else {
@@ -141,7 +141,7 @@ if ($CaptureScope -eq 'global') {
   Write-Host "✓ 采集范围：global —— 所有项目会话结束都会生成 session-history/"
 } else {
   Write-Host "• 采集范围：repo —— 未装全局采集 hook。在想启用的仓库里运行："
-  Write-Host "    powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/enable-capture-here.ps1`""
+  Write-Host "    powershell -NoProfile -ExecutionPolicy Bypass -File `"$RepoFwd/scripts/session-history/enable-capture-here.ps1`""
 }
 Write-Host ""
 Write-Host "完成。新开一个 Claude Code 会话即可生效。"
