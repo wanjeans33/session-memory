@@ -1,12 +1,31 @@
 # claude-session-memory
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![platform](https://img.shields.io/badge/Windows-%E2%9C%85%20tested-success)
+![platform](https://img.shields.io/badge/macOS%20%2F%20Linux-%E2%9A%A0%EF%B8%8F%20scripts%20ready%2C%20needs%20testing-orange)
+
+**中文** · [English](README.en.md)
+
 跨 **Mac / Windows / iPhone** 同步 Claude Code 的「记忆」：规则与偏好（`CLAUDE.md`）、累积的
 记忆事实（`memory/`）。此外还把各端会话沉淀成**按项目的进度记录**（`session-history/`，见「多端会话历史」）。
 
-核心思路：**用一个私有 git 仓库作为唯一可信源**，通过软链接 / 目录联接（junction）让 Claude Code
+核心思路：**用一个 git 仓库作为唯一可信源**，通过软链接 / 目录联接（junction）让 Claude Code
 **就地**读写这些文件；git 负责跨机同步。这也是唯一能覆盖到 iPhone 的方式（见下文）。
 
-> ⚠️ **必须使用私有仓库。** `.gitignore` 已排除 `.credentials.json` 等凭据——**绝不要**提交任何令牌/密钥。
+> 🧩 **这是一个公开「模板仓库」。** 别直接往这个公开仓库存你的个人记忆。
+> 正确用法：点 **Use this template**（或 fork）生成**你自己的仓库并设为 Private**，再 clone 下来
+> 运行安装脚本——你的记忆会同步到**你那个私有仓库**，而不是这里。详见下方「快速开始」。
+>
+> ⚠️ **存放你个人记忆的那个仓库必须私有。** 安装后 memory-sync 钩子会把 `CLAUDE.md` / `memory/`
+> 的个人事实**自动 commit + push** 到它。`.gitignore` 已排除 `.credentials.json` 等凭据——**绝不要**提交任何令牌/密钥。
+
+## 平台支持
+
+| 平台 | 状态 | 说明 |
+|---|---|---|
+| Windows（`.ps1`） | ✅ 已端到端验证 | PowerShell 5.1+ |
+| macOS / Linux（`.sh`） | ⚠️ 脚本完成、待社区实测 | 需 `jq`（`brew install jq`）；部分功能用 `perl`/`uuidgen` |
+| iPhone | ✅ 云端/远程 | 见下方「iPhone」一节 |
 
 ---
 
@@ -27,21 +46,26 @@
 
 ---
 
-## 安装
+## 快速开始
 
-### 1. 第一台机器（Windows，源机器）
+### 0. 从模板创建你自己的**私有**仓库
+在 GitHub 上点本仓库的 **Use this template → Create a new repository**，**Visibility 选 Private**
+（或 fork 后在 Settings 改成私有）。命名随意。
+
+> 为什么必须私有：安装后 memory-sync 钩子会把你的 `CLAUDE.md` / `memory/` 个人事实
+> **自动 commit + push** 到这个仓库。它必须是你私有的，**绝不能**是这个公开模板。
+>
+> 不想用 GitHub 模板？也可以从零开始：本地 `git init` 后 `gh repo create <名字> --private --source . --push`。
+
+### 1. 第一台机器（Windows）
 ```powershell
-cd E:\Github_project\claude-session-memory
-git init
-git add -A
-git commit -m "init"
-# 创建私有 GitHub 仓库并推送（用 gh，或在网页建好后 git remote add）
-gh repo create claude-session-memory --private --source . --push
+git clone <你的私有仓库地址> <本地路径>\claude-session-memory
+cd <本地路径>\claude-session-memory
 # 接入 Claude Code（创建 junction + import + 合并 settings/hooks）
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-windows.ps1
 ```
 
-### 2. 其它机器（macOS）
+### 2. 其它机器（macOS / Linux）
 ```bash
 git clone <你的私有仓库地址> ~/Github_project/claude-session-memory
 cd ~/Github_project/claude-session-memory
