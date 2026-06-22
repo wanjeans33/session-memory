@@ -7,5 +7,5 @@
 - [我的角色](user-role.md) — 我是做什么的
 -->
 
-- [多端会话记忆系统](session-history-system.md) — 采集各端会话进 session-history/，session-share 综合项目状态
+- [多端会话记忆系统](session-history-system.md) — 手动 skill session-memory：save/read/get 跨端采集·导入·综合
 - [.ps1 需 UTF-8 BOM](ps1-utf8-bom.md) — 否则中文注释在 PS5.1 下解析失败

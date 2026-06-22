@@ -1,21 +1,23 @@
 ---
 name: session-history-system
-description: 本仓库的多端会话记忆系统：采集各端会话 digest 进各项目 session-history/，session-share 技能综合项目状态
+description: 本仓库的多端会话记忆系统：手动 skill session-memory（save/read/get）采集/导入/综合各端会话，按项目存 session-history/
 metadata:
   type: project
 ---
 
-`claude-session-memory` 除同步记忆外，还实现了**多端 Agent 会话历史系统**（架构见仓库 `DESIGN.md`）。
+`claude-session-memory` 除自动同步记忆（memory-sync）外，还实现了**多端 Agent 会话历史系统**（架构见仓库 `DESIGN.md`）。
 
-- 采集适配器在 `scripts/session-history/capture/`：`claude-session-end`（Claude CLI 的 SessionEnd hook）、
-  `codex-scrape`（扫 `~/.codex/sessions/` rollout）、`desktop-scrape`（扫 `%APPDATA%\Claude\claude-code-sessions\`
-  元数据，按 cliSessionId 找真 transcript，去重已被 CLI 采过的同会话）、
-  `_lib`（脱敏 + git 信息 + 共享 transcript 解析 `Get-ClaudeTranscriptInfo` + 写 digest）。
-- 每会话产出一条统一 digest（schema 见 DESIGN.md §3）+ 脱敏原文，写进**目标项目自己**的
-  `session-history/{digests,transcripts}/`（汇聚到主工作树根）。
-- `scripts/session-history/repo-status` 出分支/worktree 索引；`scripts/session-history/build-status` 按分支聚合。
-- 旧的全量归档（archive-sessions）与 session-sync 技能已删除，统一由 capture 收口。
-- `skills/session-share` 技能读 digests+索引+memory → 生成 `STATUS.md`（项目进度）。
+**全手动**，一个 skill `skills/session-memory/`，三个子命令（`/session-memory <子命令>`）：
+- **save** → `scripts/session-history/save.*`：`-Current`（采当前会话）/ `-All`（扫 Claude CLI/Desktop + Codex）；`-Commit` 显式提交。
+- **read** → `scripts/session-history/read.*`：把本项目 `session-history/` 里其它端会话注入当前端列表
+  （CLI `~/.claude/projects/<enc>/<id>.jsonl` + Desktop `local_*.json` 描述符），标题前缀来源标签 `(codex)`/`(cli)`/`(desktop)`。
+  Codex 为占位（非全保真）；仅同 OS。
+- **get** → 跑 `repo-status` + `build-status` + 读 memory → 写 `session-history/STATUS.md`（即原 session-share）。
 
-**状态（2026-06-19）**：Windows(.ps1) 已端到端验证（含 Desktop 采集）；macOS(.sh) 依赖 jq/perl，**尚未验证**。
-未做：Cloud 适配（云端 committed Stop hook）。相关：[[ps1-utf8-bom]]。
+适配器在 `scripts/session-history/capture/`：`claude-scrape`（-Current/-All/-TranscriptPath）、`codex-scrape`、`desktop-scrape`、
+`_lib`（脱敏 + git + 共享解析 `Get-ClaudeTranscriptInfo` + 写 digest + `Get-EncodedProject`）。digest schema 见 DESIGN.md §3，写进各项目 `session-history/{digests,transcripts}/`（汇聚到主工作树根）。
+
+**已删除**：自动 SessionEnd 采集 hook、`enable-capture-here`、`SESSION_HISTORY_AUTOCOMMIT`、旧 `archive-sessions` 与 `session-sync` 技能、`session-share`（改名 session-memory）。memory-sync 的自动 hook 保留。
+
+**状态（2026-06-23）**：Windows(.ps1) save/read/get 端到端验证通过；macOS(.sh) 依赖 jq/perl/uuidgen，**尚未本机验证**。
+未做：Cloud 适配、跨 OS path-map（read 目前仅同 OS）。相关：[[ps1-utf8-bom]]。

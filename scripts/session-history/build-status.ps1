@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
   汇聚 session-history/digests/*.json + index.json，按分支分组，输出紧凑 JSON 到 stdout。
-  供 session-share 技能低成本消费（不必逐个读 digest 文件）。
+  供 session-memory 的 get 子命令低成本消费（不必逐个读 digest 文件）。
 .PARAMETER Repo
   仓库内任意路径；默认当前目录。
 .PARAMETER Days

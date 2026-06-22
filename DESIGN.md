@@ -11,15 +11,21 @@
 
 1. **存储位置 = 嵌入每个目标项目仓库**。记录落在 `<project>/session-history/`，随项目一起被 git 管理。
 2. **隐私 = digest + 脱敏后的原文**。提交前对 transcript 跑密钥扫描/脱敏（best-effort，见 §5）。
-3. **首批范围 = Phase 0 + 1 + 3 + 4**：收口/版本化、Claude CLI 采集、session-share 技能、Codex 适配。
+
+## 已定决策（2026-06-23，交互改为手动命令）
+3. **取消一切自动触发**：删除 SessionEnd 采集 hook、删除 skill 的 description 自动触发。
+4. **统一为一个手动 skill `session-memory`，三个子命令**：`save`（存会话，问全部/仅当前）、`read`（把其它端会话导入当前端 CLI+Desktop 列表、标题打来源标签）、`get`（综合 STATUS.md，即原 session-share）。
+5. **保留 memory-sync 自动**（CLAUDE.md/memory 的 SessionStart 拉取 / SessionEnd 推送 hook 不变）。
 
 ---
 
 ## 1. 四层架构
 
 ```
-采集适配器(每端一个)  →  Normalizer(统一 digest)  →  会话账本 + 分支/worktree 索引  →  session-share 技能 → Project Status
+采集适配器(每端一个)  →  Normalizer(统一 digest)  →  会话账本 + 分支/worktree 索引  →  session-memory 技能(get) → Project Status
 ```
+
+> 入口是**手动** skill `session-memory`：`save`（采集，调用下述适配器）、`read`（把账本里其它端会话注入当前端列表）、`get`（综合状态）。无自动 hook。
 
 | 层 | 职责 | 产物 |
 |---|---|---|
@@ -39,21 +45,19 @@
 ├── transcripts/                   # 脱敏后的原始记录（可全文检索）
 │   └── 2026-06-17_153012-claude-18f57795.jsonl
 ├── index.json                     # 分支/worktree 状态快照（由 repo-status 生成）
-└── STATUS.md                      # 人读项目状态（由 session-share 生成）
+└── STATUS.md                      # 人读项目状态（由 get 生成）
 ```
 
 **写到哪个 worktree？** 统一写进**主工作树根目录**（= `git rev-parse --path-format=absolute --git-common-dir` 的父目录），
 让所有分支/worktree 的会话都汇聚到一处，避免随 feature 分支删除而丢失。digest 里仍如实记录会话实际所在的
 分支与 worktree 路径。
 
-**提交策略：** 采集 hook **只写文件，默认不自动 commit**（避免在你正在干活的分支上插入意外提交）。
-- 默认：文件出现在工作树里，随你下次正常 commit 带走；或由 `session-share` 技能统一 commit。
-- 可选自动提交：设环境变量 `SESSION_HISTORY_AUTOCOMMIT=1` 时，采集脚本只 `git add session-history/` 后单独提交（绝不 `add -A`）。
+**提交策略：** `save` **只写文件，默认不自动 commit**（避免在你正在干活的分支上插入意外提交）。
+- 默认：文件出现在工作树里，随你下次正常 commit 带走，或 `get` 时统一 commit。
+- 显式提交：`save -Commit`（mac `--commit`）只 `git add session-history/` 后单独提交（绝不 `add -A`）。取代了旧的 `SESSION_HISTORY_AUTOCOMMIT` 环境开关。
 
-**采集范围（开关）：** Claude CLI 采集 hook 装在哪决定它对哪些项目生效——
-- **global**（默认）：写进用户级 `~/.claude/settings.json`，对**所有**项目会话生效（`install-* -CaptureScope global` / `CAPTURE_SCOPE=global`）。
-- **repo**：不装全局 hook；由 `scripts/session-history/enable-capture-here.*` 把 hook 写进**单个仓库**的 `.claude/settings.local.json`（本地、不提交，含本机绝对路径）。
-两者互斥（避免一次会话采两条）；切到 global 时安装脚本会清掉自己之前可能装的全局采集 hook 的重复项。
+**采集触发：** 全手动，无 hook。`save -Current` 采当前会话、`save -All` 扫本机所有端（Claude CLI/Desktop + Codex）。
+（旧的"全局/按 repo 采集 hook"与 `enable-capture-here` 已移除。）
 
 ---
 
@@ -98,13 +102,14 @@
 
 ## 4. 各技术栈采集方式
 
-| 端 | 原始存储 | 触发 | 采集脚本 |
-|---|---|---|---|
-| **Claude Code CLI** | `~/.claude/projects/<encoded>/*.jsonl` | `SessionEnd` hook（stdin 给 `transcript_path`/`cwd`/`session_id`） | `scripts/session-history/capture/claude-session-end.{ps1,sh}` |
-| **Codex CLI** | `~/.codex/sessions/Y/M/D/rollout-*.jsonl` | 无 hook → `config.toml` 的 `notify`，或手动/定时 | `scripts/session-history/capture/codex-scrape.{ps1,sh}`（按 mtime 增量，游标存 `~/.claude/.codex-scrape-cursor`） |
-| **Claude Desktop** | `%APPDATA%\Claude\claude-code-sessions\**\local_*.json`（元数据：cliSessionId/cwd/branch/title…）+ 真 transcript 在 `~/.claude/projects/<encoded>/<cliSessionId>.jsonl` | 无 hook → 按需 scrape | `scripts/session-history/capture/desktop-scrape.{ps1,sh}`（按 cliSessionId 找 transcript，复用 Claude 解析，用 title/branch 增强；对已被 CLI hook 采过的同会话去重；游标 `~/.claude/.desktop-scrape-cursor`） |
-| **Cloud / local** | 云端 VM，克隆本仓 | committed `Stop` hook | （Phase 5，未做） |
-| **iPhone** | 无本地（Remote Control 跑在宿主机） | 跟随宿主机 | 归到宿主机那台，不单独采集 |
+全部由 `save` 手动驱动（`save -Current` 只采当前会话；`save -All` 调用下面三个适配器全扫）。
+
+| 端 | 原始存储 | 采集脚本（由 save 调用） |
+|---|---|---|
+| **Claude Code CLI / Desktop** | `~/.claude/projects/<encoded>/*.jsonl`（Desktop 也走内置 CLI 写这里） | `capture/claude-scrape.{ps1,sh}`：`-Current`（cwd 对应项目里最新一条）/ `-All`（扫全部） |
+| **Codex CLI** | `~/.codex/sessions/Y/M/D/rollout-*.jsonl` | `capture/codex-scrape.{ps1,sh}`（按 mtime 增量，游标 `~/.claude/.codex-scrape-cursor`） |
+| **Claude Desktop（元数据增强）** | `%APPDATA%\Claude\claude-code-sessions\**\local_*.json`（cliSessionId/cwd/branch/title…）+ 真 transcript 同上 | `capture/desktop-scrape.{ps1,sh}`（按 cliSessionId 找 transcript，复用解析，用 title/branch 增强、去重；游标 `~/.claude/.desktop-scrape-cursor`） |
+| **Cloud / iPhone** | 云端 VM / 无本地 | 未做（Cloud）/ 归宿主机 |
 
 > 不追求"跨端实时 resume"——各 OS 把项目绝对路径编码成不同文件夹名，且记录内嵌绝对路径，技术上做不到。
 > 我们采集的是**可检索的进度**。
@@ -144,19 +149,26 @@
 }
 ```
 
-`session-share` 技能把 `digests/*.json` 按 `git.branch` 挂到对应分支，得到"每条分支/worktree 上有哪些会话、在干什么"。
+`get` 把 `digests/*.json` 按 `git.branch` 挂到对应分支，得到"每条分支/worktree 上有哪些会话、在干什么"。
 
 ---
 
-## 7. session-share 技能（Phase 3）
+## 7. skill `session-memory`（手动入口）
 
-`skills/session-share/SKILL.md`，流程：
-1. 跑 `repo-status` 刷新 `index.json`。
-2. 读全部 `digests/*.json`，按分支/worktree 分组。
-3. 读 `memory/`（稳定事实）。
-4. 综合出 `STATUS.md`：每条分支/worktree 当前在做什么、最近会话、未完成线索、建议下一步；
-   把稳定结论沉淀回 `memory/`。
-5. 可选：commit `session-history/`。
+`skills/session-memory/SKILL.md`，description 写成"仅显式调用"以**不自动触发**。三个子命令：
+
+- **save**：问"全部/仅当前"→ `save.{ps1,sh} -Current|-All [-Commit]`。
+- **read**：把账本里其它端会话注入当前端列表（见 §7.1）。
+- **get**：① 跑 `repo-status` 刷 `index.json`；② `build-status` 按分支聚合；③ 读 `memory/`；④ 综合写 `STATUS.md`。
+
+### 7.1 read — 跨端导入（`read.{ps1,sh}`）
+- `-List`：列本项目 `session-history/` 候选（base、tool、machine、title）。
+- `-Import -Ids … -Targets cli,desktop`：
+  - **Claude 来源**（claude-cli/claude-desktop）：transcript 已是 Claude jsonl → 复制成 `~/.claude/projects/<encode(cwd)>/<新uuid>.jsonl`，首条 user 消息前缀来源标签 `(cli)`/`(desktop)`。
+  - **Codex 来源**：rollout 非 Claude 格式 → 生成最小占位 jsonl（first_prompt + 指向脱敏原文的说明），标签 `(codex)`。
+  - **CLI 目标**：上面的 jsonl 即可被 `claude --resume` 列出。
+  - **Desktop 目标**：在 `%APPDATA%\Claude\claude-code-sessions\<acct>\<wksp>\local_<uuid>.json` 造描述符（`title` 可控、带标签；`cliSessionId` 指向上面 jsonl）；`<acct>/<wksp>` 从现存任一 `local_*.json` 反查。
+- **限制**：仅同 OS 导入（cwd 绝对路径/项目编码因 OS 而异，跨 OS 待 path-map）；Codex 为占位非全保真；无现存 Desktop 描述符则跳过 Desktop 目标。
 
 ---
 
@@ -169,5 +181,6 @@
 - **Phase 4** Codex 适配器。
 - **Phase 5** Desktop 适配器 ✅（`desktop-scrape`）；Cloud 适配器（committed `Stop` hook）未做。
 - **Phase 6** 硬化：密钥扫描 CI、跨 OS path-map、并发回归。
+- **Phase 7** ✅ 交互重构：取消自动触发；统一手动 skill `session-memory`（save/read/get）；新增 read 跨端导入。
 
-> 已交付：Phase 0–5（Desktop 已含；Cloud 待做）。
+> 已交付：Phase 0–5 + 7（Desktop 已含；Cloud、跨 OS path-map 待做）。

@@ -39,6 +39,18 @@ os_name() {
   case "$(uname -s)" in Darwin) echo macos;; Linux) echo linux;; *) echo unknown;; esac
 }
 
+# 项目绝对路径 → Claude projects 文件夹名（: / _ . → -；mac/linux 无反斜杠）
+encode_project() { printf '%s' "$1" | sed 's/[:/_.]/-/g'; }
+
+# 显式提交某项目 session-history（取代旧 autocommit 环境开关）
+commit_session_history() {
+  local root="$1" msg="${2:-chore(session-history): update}"
+  git -C "$root" add -- session-history 2>/dev/null || true
+  if [ -n "$(git -C "$root" status --porcelain -- session-history 2>/dev/null)" ]; then
+    git -C "$root" commit -q -m "$msg" -- session-history 2>/dev/null || true
+  fi
+}
+
 # $1=base 文件名（无扩展名） $2=digest JSON 字符串 $3=脱敏 transcript 文件(可空) $4=项目根
 write_digest() {
   local base="$1" digest_json="$2" redacted_file="$3" root="$4"
@@ -50,12 +62,6 @@ write_digest() {
     cp "$redacted_file" "$hist/transcripts/$base.jsonl"
   fi
   printf '%s\n' "$digest_json" > "$hist/digests/$base.json"
-  if [ "${SESSION_HISTORY_AUTOCOMMIT:-}" = "1" ]; then
-    git -C "$root" add -- session-history 2>/dev/null || true
-    if [ -n "$(git -C "$root" status --porcelain -- session-history 2>/dev/null)" ]; then
-      git -C "$root" commit -q -m "chore(session-history): $base" -- session-history 2>/dev/null || true
-    fi
-  fi
   echo "$hist/digests/$base.json"
 }
 
