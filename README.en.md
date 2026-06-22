@@ -4,7 +4,7 @@
 ![platform](https://img.shields.io/badge/Windows-%E2%9C%85%20tested-success)
 ![platform](https://img.shields.io/badge/macOS%20%2F%20Linux-%E2%9A%A0%EF%B8%8F%20scripts%20ready%2C%20needs%20testing-orange)
 
-[中文](README.md) · **English**
+[Chinese](README.md) · **English**
 
 Sync Claude Code's **memory** across **Mac / Windows / iPhone**: your rules & preferences
 (`CLAUDE.md`) and accumulated facts (`memory/`). It also distills sessions from every endpoint
