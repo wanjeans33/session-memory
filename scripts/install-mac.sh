@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# 在 macOS 上把 Claude Code 接入这个记忆仓库：
-#   1) 软链接：~/.claude/projects/<encoded>/memory -> <repo>/memory
-#   2) 在 ~/.claude/CLAUDE.md 写入 @import 引用仓库 CLAUDE.md（全局规则）
-#   3) 合并 settings/settings.shared.json 进 ~/.claude/settings.json（需要 jq）
-#   4) 安装 hooks：SessionStart 拉取 / SessionEnd 提交推送【记忆仓库】
-# 会话采集已改为手动 /session-memory save，不再装采集 hook（并清理历史装过的）。
-# 幂等：可重复运行。修改 settings.json 前会备份为 settings.json.bak。
+# Connect this memory repository to Claude Code on macOS:
+#   1) Symlink ~/.claude/projects/<encoded>/memory -> <repo>/memory
+#   2) Add an @import for this repository's CLAUDE.md to ~/.claude/CLAUDE.md
+#   3) Merge settings/settings.shared.json into ~/.claude/settings.json (requires jq)
+#   4) Install hooks that pull at SessionStart and commit/push this repository at SessionEnd
+# Session capture is manual via /session-memory save; no capture hooks are installed.
+# Idempotent: safe to re-run. settings.json is backed up as settings.json.bak before changes.
 set -euo pipefail
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPTS/.." && pwd)"
 CLAUDE="$HOME/.claude"
 
-# 绝对路径 -> Claude 项目文件夹名（空格 : / _ . 都变成 -）
+# Absolute path -> Claude project directory name (spaces, :, /, _, and . become -)
 encode() { printf '%s' "$1" | sed 's/[ :/_.]/-/g'; }
 ENCODED="$(encode "$REPO")"
 PROJ_MEM="$CLAUDE/projects/$ENCODED/memory"
@@ -24,10 +24,10 @@ elif [ -d "$PROJ_MEM" ]; then
   rm -rf "$PROJ_MEM"
 fi
 ln -s "$REPO/memory" "$PROJ_MEM"
-echo "✓ 记忆软链接: $PROJ_MEM -> $REPO/memory"
+echo "✓ Memory symlink: $PROJ_MEM -> $REPO/memory"
 
-# 技能软链接：Claude 用 ~/.claude/skills，Codex 用 ~/.agents/skills。
-# 两端均指向仓库中的同一份技能，避免版本漂移。
+# Skill symlinks: Claude uses ~/.claude/skills and Codex uses ~/.agents/skills.
+# Both clients point to the same repository copy to prevent version drift.
 if [ -d "$REPO/skills" ]; then
   for skills_dst in "$CLAUDE/skills" "$HOME/.agents/skills"; do
     mkdir -p "$skills_dst"
@@ -38,24 +38,24 @@ if [ -d "$REPO/skills" ]; then
       [ -L "$link" ] && rm "$link"
       [ -d "$link" ] && rm -rf "$link"
       ln -s "${sk%/}" "$link"
-      echo "✓ 技能软链接: $link -> ${sk%/}"
+      echo "✓ Skill symlink: $link -> ${sk%/}"
     done
   done
-  # 清理已改名的旧技能链接 session-share（现为 session-memory）
-  [ -L "$CLAUDE/skills/session-share" ] && { rm "$CLAUDE/skills/session-share"; echo "✓ 已移除旧技能链接 session-share"; } || true
+  # Remove the legacy session-share symlink, renamed to session-memory.
+  [ -L "$CLAUDE/skills/session-share" ] && { rm "$CLAUDE/skills/session-share"; echo "✓ Removed legacy skill symlink: session-share"; } || true
 fi
 
 # CLAUDE.md import
 USER_MD="$CLAUDE/CLAUDE.md"
 LINE="@$REPO/CLAUDE.md"
 if ! grep -qF "$LINE" "$USER_MD" 2>/dev/null; then
-  printf '\n# 多端同步的全局记忆（由 claude-session-memory 安装）\n%s\n' "$LINE" >> "$USER_MD"
-  echo "✓ 已在 ~/.claude/CLAUDE.md 写入 import"
+  printf '\n# Cross-device shared memory (installed by claude-session-memory)\n%s\n' "$LINE" >> "$USER_MD"
+  echo "✓ Added import to ~/.claude/CLAUDE.md"
 else
-  echo "• ~/.claude/CLAUDE.md 已包含 import，跳过"
+  echo "• ~/.claude/CLAUDE.md already contains the import; skipped"
 fi
 
-# settings.json 合并 + hooks（需要 jq）
+# settings.json merge and hooks (requires jq)
 SETTINGS="$CLAUDE/settings.json"
 START_CMD="bash \"$REPO/scripts/memory-sync/sync.sh\" --pull-only"
 END_CMD="bash \"$REPO/scripts/memory-sync/sync.sh\""
@@ -65,7 +65,7 @@ if command -v jq >/dev/null 2>&1; then
   jq \
     --slurpfile shared "$REPO/settings/settings.shared.json" \
     --arg start "$START_CMD" --arg end "$END_CMD" '
-    ($shared[0] + .) as $merged                       # shared 不覆盖已有键
+    ($shared[0] + .) as $merged                       # shared settings do not override existing keys
     | $merged
     | .hooks //= {}
     | .hooks.SessionStart //= []
@@ -74,14 +74,14 @@ if command -v jq >/dev/null 2>&1; then
         else .hooks.SessionStart += [{hooks:[{type:"command",command:$start}]}] end)
     | (if [.hooks.SessionEnd[].hooks[].command] | index($end) then .
         else .hooks.SessionEnd += [{hooks:[{type:"command",command:$end}]}] end)
-    # 会话采集已改手动：移除历史装过的采集 hook（保留 memory-sync 的 sync hook）
+    # Capture is manual: remove legacy capture hooks while preserving memory-sync hooks.
     | (.hooks.SessionEnd |= map(select((.hooks // [] | map(.command) | map(test("claude-session-end|claude-scrape|/session-history/capture/")) | any) | not)))
   ' "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS"
-  echo "✓ 已合并 settings.json 并安装 memory-sync hooks（备份在 settings.json.bak）"
-  echo "• 会话采集为手动：Claude 用 /session-memory save；Codex 用 \$session-memory save（或 scripts/session-history/save.sh）"
+  echo "✓ Merged settings.json and installed memory-sync hooks (backup: settings.json.bak)"
+  echo "• Session capture is manual: Claude uses /session-memory save; Codex uses \$session-memory save (or scripts/session-history/save.sh)"
 else
-  echo "⚠ 未找到 jq，跳过 settings/hooks 合并。请手动安装 jq（brew install jq）后重跑，或手动编辑 ~/.claude/settings.json。"
+  echo "⚠ jq was not found; skipped settings/hooks merge. Install it (brew install jq) and rerun, or edit ~/.claude/settings.json manually."
 fi
 
 echo ""
-echo "完成。新开 Claude Code 或 Codex 会话即可生效。"
+echo "Done. Start a new Claude Code or Codex session to load the skills."
