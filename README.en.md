@@ -82,7 +82,7 @@ What the installer does (identical on both, idempotent, re-runnable):
 1. Links `~/.claude/projects/<encoded-project>/memory` → this repo's `memory/`;
 2. Adds one line `@<repo>/CLAUDE.md` to `~/.claude/CLAUDE.md` to import global rules;
 3. Merges `settings/settings.shared.json` into `~/.claude/settings.json` (backs up to `.bak` first);
-4. Links skills under `skills/` into `~/.claude/skills/` (incl. `session-memory`);
+4. Links skills under `skills/` into Claude's `~/.claude/skills/` and Codex's `~/.agents/skills/` (incl. `session-memory`);
 5. Installs **memory-sync** hooks: **SessionStart** pulls, **SessionEnd** commits & pushes the
    memory repo. (Session capture installs **no** hook — it's the manual `/session-memory save`;
    the installer also cleans up any legacy capture hooks.)
@@ -91,7 +91,7 @@ What the installer does (identical on both, idempotent, re-runnable):
 
 ## Daily use
 - Memory sync is **automatic**: `git pull` on session start, `commit` + `push` on session end.
-- Session history is **manual**: run `/session-memory save|read|get` inside a project when needed.
+- Session history is **manual**: in Claude run `/session-memory save|read|get`; in Codex run `$session-memory save|read|get`.
 - Memory and rule edits get committed alongside `memory/` and `CLAUDE.md`.
 - Manual fallback (sync the memory repo anytime):
   - Windows: `powershell -File scripts\memory-sync\sync.ps1`

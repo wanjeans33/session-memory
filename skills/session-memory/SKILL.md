@@ -1,12 +1,12 @@
 ---
 name: session-memory
-description: 手动会话记忆命令，含 save / read / get 三个子命令。仅当用户【显式】输入 `/session-memory save|read|get`（或明确说"运行 session-memory 的 save/read/get"）时才使用；不要因为用户随口问进度、提到保存会话等就自动触发——这是一个手动命令，不自动运行。
+description: 手动会话记忆命令，含 save / read / get 三个子命令。仅当用户【显式】调用 Claude 的 `/session-memory save|read|get`、Codex 的 `$session-memory save|read|get`，或明确说“运行 session-memory 的 save/read/get”时才使用；不要因为用户随口问进度、提到保存会话等就自动触发——这是一个手动命令，不自动运行。
 ---
 
 # session-memory — 手动会话记忆命令（save / read / get）
 
-**仅手动触发。** 用户显式调用 `/session-memory <子命令>` 时，按下面对应流程执行。
-不要自动触发；若用户只是闲聊式提到进度/记忆，提示他们可运行 `/session-memory get` 等，但不要自己跑。
+**仅手动触发。** 用户显式调用 Claude 的 `/session-memory <子命令>` 或 Codex 的 `$session-memory <子命令>` 时，按下面对应流程执行。
+不要自动触发；若用户只是闲聊式提到进度/记忆，提示 Claude 用户可运行 `/session-memory get`、Codex 用户可运行 `$session-memory get`，但不要自己跑。
 
 底层脚本在仓库 `scripts/session-history/`（Windows 用 `.ps1`，macOS/Linux 用 `.sh`）。
 先确定本仓库路径 `<repo>`（即 claude-session-memory 的安装路径）。

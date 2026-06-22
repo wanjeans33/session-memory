@@ -26,17 +26,20 @@ fi
 ln -s "$REPO/memory" "$PROJ_MEM"
 echo "✓ 记忆软链接: $PROJ_MEM -> $REPO/memory"
 
-# 技能软链接：~/.claude/skills/<name> -> <repo>/skills/<name>
+# 技能软链接：Claude 用 ~/.claude/skills，Codex 用 ~/.agents/skills。
+# 两端均指向仓库中的同一份技能，避免版本漂移。
 if [ -d "$REPO/skills" ]; then
-  mkdir -p "$CLAUDE/skills"
-  for sk in "$REPO"/skills/*/; do
-    [ -d "$sk" ] || continue
-    name="$(basename "$sk")"
-    link="$CLAUDE/skills/$name"
-    [ -L "$link" ] && rm "$link"
-    [ -d "$link" ] && rm -rf "$link"
-    ln -s "${sk%/}" "$link"
-    echo "✓ 技能软链接: $link -> ${sk%/}"
+  for skills_dst in "$CLAUDE/skills" "$HOME/.agents/skills"; do
+    mkdir -p "$skills_dst"
+    for sk in "$REPO"/skills/*/; do
+      [ -d "$sk" ] || continue
+      name="$(basename "$sk")"
+      link="$skills_dst/$name"
+      [ -L "$link" ] && rm "$link"
+      [ -d "$link" ] && rm -rf "$link"
+      ln -s "${sk%/}" "$link"
+      echo "✓ 技能软链接: $link -> ${sk%/}"
+    done
   done
   # 清理已改名的旧技能链接 session-share（现为 session-memory）
   [ -L "$CLAUDE/skills/session-share" ] && { rm "$CLAUDE/skills/session-share"; echo "✓ 已移除旧技能链接 session-share"; } || true
@@ -75,10 +78,10 @@ if command -v jq >/dev/null 2>&1; then
     | (.hooks.SessionEnd |= map(select((.hooks // [] | map(.command) | map(test("claude-session-end|claude-scrape|/session-history/capture/")) | any) | not)))
   ' "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS"
   echo "✓ 已合并 settings.json 并安装 memory-sync hooks（备份在 settings.json.bak）"
-  echo "• 会话采集为手动：项目里用 /session-memory save（或 scripts/session-history/save.sh）"
+  echo "• 会话采集为手动：Claude 用 /session-memory save；Codex 用 \$session-memory save（或 scripts/session-history/save.sh）"
 else
   echo "⚠ 未找到 jq，跳过 settings/hooks 合并。请手动安装 jq（brew install jq）后重跑，或手动编辑 ~/.claude/settings.json。"
 fi
 
 echo ""
-echo "完成。新开一个 Claude Code 会话即可生效。"
+echo "完成。新开 Claude Code 或 Codex 会话即可生效。"
