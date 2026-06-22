@@ -19,14 +19,14 @@ save_one() {
   parsed=$(jq -s '
     def usertext($c): if ($c|type)=="string" then $c else ([ $c[]? | select(.type=="text") | .text ] | first) end;
     def istoolresult($c): if ($c|type)=="string" then false else (any($c[]?; .type=="tool_result")) end;
-    { id:([.[].sessionId?//empty]|first//""), started_at:([.[].timestamp?//empty]|first//""),
-      ended_at:([.[].timestamp?//empty]|last//""),
-      branch:([.[].gitBranch?//empty|select(.!=""and .!="HEAD")]|first//""),
-      cwd:([.[].cwd?//empty]|first//""), version:([.[].version?//empty]|first//""),
+    { id:([.[].sessionId? //empty]|first//""), started_at:([.[].timestamp? //empty]|first//""),
+      ended_at:([.[].timestamp? //empty]|last//""),
+      branch:([.[].gitBranch? //empty|select(.!=""and .!="HEAD")]|first//""),
+      cwd:([.[].cwd? //empty]|first//""), version:([.[].version? //empty]|first//""),
       prompts:[ .[]|select(.type=="user" and .message.role=="user")|select(istoolresult(.message.content)|not)
                 |usertext(.message.content)|select(.!=null and (startswith("<")|not)) ],
       files:([ .[]|select(.type=="assistant")|.message.content[]?|select(.type=="tool_use")
-               |select(.name=="Edit" or .name=="Write" or .name=="MultiEdit" or .name=="NotebookEdit")|.input.file_path?//empty ]|unique),
+               |select(.name=="Edit" or .name=="Write" or .name=="MultiEdit" or .name=="NotebookEdit")|.input.file_path? //empty ]|unique),
       tools:( reduce (.[]|select(.type=="assistant")|.message.content[]?|select(.type=="tool_use")|.name) as $n ({}; .[$n]+=1) )
     }' "$tp" 2>/dev/null)
   [ -n "$parsed" ] || return 0

@@ -54,12 +54,12 @@ while IFS= read -r mf; do
     parsed=$(jq -s '
       def usertext($c): if ($c|type)=="string" then $c else ([ $c[]? | select(.type=="text") | .text ] | first) end;
       def istoolresult($c): if ($c|type)=="string" then false else (any($c[]?; .type=="tool_result")) end;
-      { started:([.[].timestamp?//empty]|first//""), ended:([.[].timestamp?//empty]|last//""),
-        branch:([.[].gitBranch?//empty|select(.!=""and .!="HEAD")]|first//""), version:([.[].version?//empty]|first//""),
+      { started:([.[].timestamp? //empty]|first//""), ended:([.[].timestamp? //empty]|last//""),
+        branch:([.[].gitBranch? //empty|select(.!=""and .!="HEAD")]|first//""), version:([.[].version? //empty]|first//""),
         prompts:[ .[]|select(.type=="user" and .message.role=="user")|select(istoolresult(.message.content)|not)
                   |usertext(.message.content)|select(.!=null and (startswith("<")|not)) ],
         files:([ .[]|select(.type=="assistant")|.message.content[]?|select(.type=="tool_use")
-                 |select(.name=="Edit" or .name=="Write" or .name=="MultiEdit" or .name=="NotebookEdit")|.input.file_path?//empty ]|unique),
+                 |select(.name=="Edit" or .name=="Write" or .name=="MultiEdit" or .name=="NotebookEdit")|.input.file_path? //empty ]|unique),
         tools:( reduce (.[]|select(.type=="assistant")|.message.content[]?|select(.type=="tool_use")|.name) as $n ({}; .[$n]+=1) )
       }' "$tr" 2>/dev/null)
     if [ -n "$parsed" ]; then

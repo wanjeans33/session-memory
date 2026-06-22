@@ -20,3 +20,6 @@ desktop.ini
 
 # 机器相关、不应同步的设置（只同步 settings/settings.shared.json）
 /settings/settings.local.json
+
+# 本仓库（工具自身）的会话历史：开发时 /session-memory save 会落地于此，不入库
+/session-history/

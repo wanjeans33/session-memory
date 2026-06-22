@@ -11,8 +11,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPTS/.." && pwd)"
 CLAUDE="$HOME/.claude"
 
-# 绝对路径 -> Claude 项目文件夹名（: / _ . 都变成 -）
-encode() { printf '%s' "$1" | sed 's/[:/_.]/-/g'; }
+# 绝对路径 -> Claude 项目文件夹名（空格 : / _ . 都变成 -）
+encode() { printf '%s' "$1" | sed 's/[ :/_.]/-/g'; }
 ENCODED="$(encode "$REPO")"
 PROJ_MEM="$CLAUDE/projects/$ENCODED/memory"
 

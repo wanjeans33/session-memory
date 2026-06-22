@@ -14,8 +14,8 @@ $Repo    = Split-Path -Parent $PSScriptRoot
 $RepoFwd = $Repo -replace '\\', '/'
 $claude  = Join-Path $env:USERPROFILE '.claude'
 
-# 把绝对路径编码成 Claude Code 的项目文件夹名（: \ / _ . 都变成 -）
-function Get-EncodedProject([string]$p) { $p -replace '[:\\/_.]', '-' }
+# 把绝对路径编码成 Claude Code 的项目文件夹名（空格 : \ / _ . 都变成 -）
+function Get-EncodedProject([string]$p) { $p -replace '[ :\\/_.]', '-' }
 
 Write-Host "仓库: $Repo"
 

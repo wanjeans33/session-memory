@@ -51,8 +51,8 @@ function Get-OsName {
   return 'linux'
 }
 
-# 把项目绝对路径编码成 Claude Code 的 projects 文件夹名（: \ / _ . → -）
-function Get-EncodedProject([string]$p) { return ($p -replace '[:\\/_.]', '-') }
+# 把项目绝对路径编码成 Claude Code 的 projects 文件夹名（空格 : \ / _ . → -）
+function Get-EncodedProject([string]$p) { return ($p -replace '[ :\\/_.]', '-') }
 
 # 解析 Claude transcript（jsonl 行数组）→ 关键字段。Claude CLI 与 Desktop 共用同一 transcript 格式。
 function Get-ClaudeTranscriptInfo([string[]]$lines) {

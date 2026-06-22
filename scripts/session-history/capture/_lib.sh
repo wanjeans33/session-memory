@@ -12,8 +12,8 @@ redact() {
     s/xox[baprs]-[A-Za-z0-9-]{10,}/[REDACTED:slack-token]/g;
     s/AKIA[0-9A-Z]{16}/[REDACTED:aws-key]/g;
     s/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/[REDACTED:jwt]/g;
-    s/(authorization"?\s*[:=]\s*"?\s*bearer\s+)[A-Za-z0-9._-]+/$1[REDACTED:bearer]/gi;
-    s/((?:password|passwd|api[_-]?key|secret|access[_-]?token|token)"?\s*[:=]\s*"?)[^"\s,}]{6,}/$1[REDACTED]/gi;
+    s/(authorization"?\s*[:=]\s*"?\s*bearer\s+)[A-Za-z0-9._-]+/${1}[REDACTED:bearer]/gi;
+    s/((?:password|passwd|api[_-]?key|secret|access[_-]?token|token)"?\s*[:=]\s*"?)[^"\s,}]{6,}/${1}[REDACTED]/gi;
   '
 }
 redact_str() { printf '%s' "$1" | redact; }
@@ -39,8 +39,8 @@ os_name() {
   case "$(uname -s)" in Darwin) echo macos;; Linux) echo linux;; *) echo unknown;; esac
 }
 
-# 项目绝对路径 → Claude projects 文件夹名（: / _ . → -；mac/linux 无反斜杠）
-encode_project() { printf '%s' "$1" | sed 's/[:/_.]/-/g'; }
+# 项目绝对路径 → Claude projects 文件夹名（空格 : / _ . → -；mac/linux 无反斜杠）
+encode_project() { printf '%s' "$1" | sed 's/[ :/_.]/-/g'; }
 
 # 显式提交某项目 session-history（取代旧 autocommit 环境开关）
 commit_session_history() {
