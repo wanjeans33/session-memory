@@ -52,14 +52,15 @@ bash scripts/install-mac.sh        # 需要 jq 才能自动合并 settings/hooks
 1. 把 `~/.claude/projects/<编码项目名>/memory` 链接到本仓库 `memory/`；
 2. 在 `~/.claude/CLAUDE.md` 写入一行 `@<仓库>/CLAUDE.md` 引用全局规则；
 3. 把 `settings/settings.shared.json` 合并进 `~/.claude/settings.json`（修改前自动备份为 `.bak`）；
-4. 链接 `skills/` 下技能到 `~/.claude/skills/`；
-5. 安装 hooks：**SessionStart** 拉取记忆仓库、**SessionEnd** 同步记忆仓库并采集本次会话
-   （采集范围 global/repo 见「多端会话历史」）。
+4. 链接 `skills/` 下技能到 `~/.claude/skills/`（含 `session-memory`）；
+5. 安装 **memory-sync** hooks：**SessionStart** 拉取、**SessionEnd** 提交推送【记忆仓库】。
+   （会话采集**不装 hook**——改为手动 `/session-memory save`；install 还会清理历史装过的采集 hook。）
 
 ---
 
 ## 日常使用
-- 平时**无需手动操作**：开会话时自动 `git pull`，结束时自动 `commit` + `push` 记忆仓库，并采集本次会话。
+- 记忆同步**无需手动操作**：开会话时自动 `git pull`，结束时自动 `commit` + `push` 记忆仓库。
+- 会话历史是**手动**的：需要时在项目里运行 `/session-memory save|read|get`。
 - 记忆与规则的写入会随 `memory/`、`CLAUDE.md` 一起被提交。
 - 手动兜底（同步记忆仓库，任何时候都能跑）：
   - Windows：`powershell -File scripts\memory-sync\sync.ps1`
@@ -90,40 +91,39 @@ iPhone 上**没有本地 Claude Code**，两条可用路径：
 ├── memory/                   # 文件式记忆：MEMORY.md 索引 + 每条事实一个文件
 ├── settings/settings.shared.json
 ├── skills/
-│   └── session-share/        # 技能：综合会话历史 + 分支状态 + 记忆 → 项目状态
+│   └── session-memory/       # 手动 skill：save / read / get 三个子命令
 └── scripts/
     ├── install-windows.ps1 / install-mac.sh    # 安装入口（接两套子系统）
-    ├── memory-sync/          # ① 记忆同步：sync.*（拉取/提交/推送本仓库）
-    └── session-history/      # ② 会话历史
-        ├── capture/          #    采集适配器：claude-session-end / codex-scrape / _lib
-        ├── repo-status.*     #    枚举分支/worktree → session-history/index.json
-        ├── build-status.*    #    汇聚 digests 按分支分组（供 session-share 消费）
-        └── enable-capture-here.*  # 按 repo 启用/关闭采集
+    ├── memory-sync/          # ① 记忆同步：sync.*（拉取/提交/推送本仓库，自动 hook）
+    └── session-history/      # ② 会话历史（全手动）
+        ├── save.*            #    采集当前/全部会话入 session-history/
+        ├── read.*            #    把其它端会话导入当前端列表（CLI + Desktop）
+        ├── repo-status.*     #    枚举分支/worktree → index.json
+        ├── build-status.*    #    汇聚 digests 按分支分组（供 get 消费）
+        └── capture/          #    适配器：claude-scrape / codex-scrape / desktop-scrape / _lib
 ```
 
-> 两个子系统：**① 记忆同步**（CLAUDE.md + memory，跨机共享稳定规则/事实）与
-> **② 会话历史**（按项目沉淀进度，供 session-share 综合）。各自独立。
+> 两个子系统：**① 记忆同步**（CLAUDE.md + memory，跨机共享稳定规则/事实，**自动**）与
+> **② 会话历史**（按项目沉淀进度，**手动** `/session-memory`）。各自独立。
 
 ---
 
 ## 多端会话历史（session-history）
 
-除了同步「记忆」，本仓库还提供一套**把各端 Agent 会话沉淀成项目进度**的系统（设计见 [DESIGN.md](DESIGN.md)）：
+除了同步「记忆」，本仓库还提供一套**把各端 Agent 会话沉淀成项目进度**的系统（设计见 [DESIGN.md](DESIGN.md)）。
+**全手动**，一个 skill `session-memory`，三个子命令（在目标项目里用 `/session-memory <子命令>`）：
 
-- **采集**：每次会话结束，hook 把该会话抽成一条 **digest**（分支/worktree/commit、改了哪些文件、
-  首条 prompt、工具统计）+ **脱敏后的原文**，写进**该项目自己**的 `session-history/` 目录。
-  - Claude Code CLI：`SessionEnd` hook → `scripts/session-history/capture/claude-session-end.*`。
-  - Codex CLI：无 hook，跑 `scripts/session-history/capture/codex-scrape.*` 增量扫 `~/.codex/sessions/`（手动 / 定时 / `config.toml` 的 notify）。
-  - Claude Desktop：无 hook，跑 `scripts/session-history/capture/desktop-scrape.*` 扫 `%APPDATA%\Claude\claude-code-sessions\`（按 `cliSessionId` 找到真 transcript，用 `title`/分支增强；对已被 CLI hook 采过的同会话自动去重）。
+- **`/session-memory save`** — 把会话存进**该项目** `session-history/`（digest + 脱敏原文）。会问你：
+  保存**全部**端的新会话（扫 Claude CLI/Desktop + Codex）还是只存**当前**这个会话。
+- **`/session-memory read`** — 把 `session-history/` 里**其它端**的会话导入**当前端**列表：
+  CLI（`claude --resume` 可见）+ Desktop（sidebar），标题前缀来源标签如 `(codex) …`。可选特定或全部。
+- **`/session-memory get`** — 综合 `session-history/` + 分支/worktree 索引 + `memory/`，生成 `STATUS.md`：
+  哪条分支在做什么、最近会话、未完成线索、下一步。
 
-  **采集范围（开关）**：
-  - **全局**（默认）：`install-windows.ps1`（或 `bash install-mac.sh`）一次装好，**所有项目**会话结束都采集。省事，但每个用过的 repo 都会冒出 `session-history/`。
-  - **按 repo**：`install-windows.ps1 -CaptureScope repo`（Mac：`CAPTURE_SCOPE=repo bash install-mac.sh`）不装全局 hook；想启用的仓库各自跑一次
-    `scripts/session-history/enable-capture-here.ps1`（Mac：`enable-capture-here.sh`），hook 写进**该仓库**的 `.claude/settings.local.json`（本地、不提交）。干净可控。
-    关闭：加 `-Remove`（Mac：`--remove`）。
-- **综合**：`session-share` 技能读 `session-history/` + 分支/worktree 索引 + `memory/`，
-  生成 `STATUS.md`：哪条分支在做什么、最近哪些会话碰过、未完成线索、建议下一步。
-  - 直接问 Claude：「这个项目做到哪了 / 各分支在干什么 / 生成项目状态」。
+底层脚本：`scripts/session-history/{save,read,repo-status,build-status}.*` + `capture/{claude,codex,desktop}-scrape.*`。
+也可直接命令行跑这些脚本（如 `save.ps1 -All`、`read.ps1 -List`）。
+
+> **无自动 hook**：采集只在你运行 `save` 时发生（决定取消了一切自动触发）。记忆同步（memory-sync）仍是自动的。
 
 > **隐私**：原文为 **best-effort 脱敏**（密钥/令牌→`[REDACTED:*]`）。`session-history/` 会进**目标项目**仓库，
 > 务必保证该仓库私有，并在 CI 加密钥扫描兜底。脱敏不可能 100% 覆盖。

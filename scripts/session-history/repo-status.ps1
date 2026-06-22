@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
   枚举仓库的分支 / worktree 状态，写入 <project>/session-history/index.json。
-  供 session-share 技能把 digests 按分支挂载、生成 Project Status。
+  供 session-memory 的 get 子命令把 digests 按分支挂载、生成 Project Status。
 .PARAMETER Repo
   仓库内任意路径；默认当前目录。最终写到主工作树根。
 #>

@@ -1,6 +1,6 @@
 ﻿<#
   共享库（PowerShell）：脱敏、git 信息、digest 写入。
-  被 claude-session-end.ps1 / codex-scrape.ps1 dot-source 引用。
+  被 claude-scrape / codex-scrape / desktop-scrape / save / read 等脚本 dot-source 引用。
 #>
 Set-StrictMode -Version Latest
 
@@ -50,6 +50,9 @@ function Get-OsName {
   if ($IsMacOS) { return 'macos' }
   return 'linux'
 }
+
+# 把项目绝对路径编码成 Claude Code 的 projects 文件夹名（: \ / _ . → -）
+function Get-EncodedProject([string]$p) { return ($p -replace '[:\\/_.]', '-') }
 
 # 解析 Claude transcript（jsonl 行数组）→ 关键字段。Claude CLI 与 Desktop 共用同一 transcript 格式。
 function Get-ClaudeTranscriptInfo([string[]]$lines) {
@@ -124,13 +127,16 @@ function Write-SessionDigest {
   }
   $digestPath = Join-Path $digestDir "$base.json"
   [System.IO.File]::WriteAllText($digestPath, ($Digest | ConvertTo-Json -Depth 12), $utf8)
-
-  if ($env:SESSION_HISTORY_AUTOCOMMIT -eq '1') {
-    try {
-      & git -C $ProjectRoot add -- session-history 2>$null
-      $st = & git -C $ProjectRoot status --porcelain -- session-history 2>$null
-      if ($st) { & git -C $ProjectRoot commit -q -m "chore(session-history): $base" -- session-history 2>$null }
-    } catch {}
-  }
   return $digestPath
+}
+
+# 提交某项目的 session-history（由 save -Commit 显式调用，取代旧的 autocommit 环境开关）
+function Invoke-SessionHistoryCommit([string]$ProjectRoot, [string]$Message) {
+  if (-not $Message) { $Message = "chore(session-history): update" }
+  try {
+    & git -C $ProjectRoot add -- session-history 2>$null
+    $st = & git -C $ProjectRoot status --porcelain -- session-history 2>$null
+    if ($st) { & git -C $ProjectRoot commit -q -m $Message -- session-history 2>$null; return $true }
+  } catch {}
+  return $false
 }
