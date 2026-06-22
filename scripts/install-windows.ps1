@@ -40,26 +40,34 @@ if (Test-Path $projMem) {
 cmd /c mklink /J "`"$projMem`"" "`"$repoMem`"" | Out-Null
 Write-Host "✓ 记忆 junction: $projMem -> $repoMem"
 
-# ── 1b) 技能 junction：~/.claude/skills/<name> -> <repo>\skills\<name> ──
+# ── 1b) 技能 junction：Claude 用 ~/.claude/skills，Codex 用 ~/.agents/skills ──
+# 两端均指向仓库中的同一份技能，避免版本漂移。
 $skillsSrc = Join-Path $Repo 'skills'
-$skillsDst = Join-Path $claude 'skills'
 if (Test-Path $skillsSrc) {
-  New-Item -ItemType Directory -Force -Path $skillsDst | Out-Null
-  foreach ($sk in (Get-ChildItem $skillsSrc -Directory)) {
-    $link = Join-Path $skillsDst $sk.Name
-    if (Test-Path $link) {
-      $li = Get-Item $link -Force
-      if ($li.LinkType) { cmd /c rmdir "`"$link`"" | Out-Null }
-      else { Remove-Item $link -Recurse -Force }   # 旧真实目录：用仓库版本覆盖
+  $skillsDsts = @(
+    (Join-Path $claude 'skills'),
+    (Join-Path $env:USERPROFILE '.agents\skills')
+  )
+  foreach ($skillsDst in $skillsDsts) {
+    New-Item -ItemType Directory -Force -Path $skillsDst | Out-Null
+    foreach ($sk in (Get-ChildItem $skillsSrc -Directory)) {
+      $link = Join-Path $skillsDst $sk.Name
+      if (Test-Path $link) {
+        $li = Get-Item $link -Force
+        if ($li.LinkType) { cmd /c rmdir "`"$link`"" | Out-Null }
+        else { Remove-Item $link -Recurse -Force }   # 旧真实目录：用仓库版本覆盖
+      }
+      cmd /c mklink /J "`"$link`"" "`"$($sk.FullName)`"" | Out-Null
+      Write-Host "✓ 技能 junction: $link -> $($sk.FullName)"
     }
-    cmd /c mklink /J "`"$link`"" "`"$($sk.FullName)`"" | Out-Null
-    Write-Host "✓ 技能 junction: $link -> $($sk.FullName)"
   }
   # 清理已改名的旧技能链接 session-share（现为 session-memory）
-  $oldLink = Join-Path $skillsDst 'session-share'
-  if (Test-Path $oldLink) {
-    $li = Get-Item $oldLink -Force
-    if ($li.LinkType) { cmd /c rmdir "`"$oldLink`"" | Out-Null; Write-Host "✓ 已移除旧技能链接 session-share" }
+  foreach ($skillsDst in $skillsDsts) {
+    $oldLink = Join-Path $skillsDst 'session-share'
+    if (Test-Path $oldLink) {
+      $li = Get-Item $oldLink -Force
+      if ($li.LinkType) { cmd /c rmdir "`"$oldLink`"" | Out-Null; Write-Host "✓ 已移除旧技能链接 session-share" }
+    }
   }
 }
 
@@ -135,6 +143,6 @@ if ($settings['hooks'].ContainsKey('SessionEnd')) {
 
 $settings | ConvertTo-Json -Depth 12 | Set-Content -Path $settingsPath -Encoding UTF8
 Write-Host "✓ 已合并 settings.json 并安装 memory-sync hooks（备份在 settings.json.bak）"
-Write-Host "• 会话采集为手动：项目里用 /session-memory save（或 scripts\session-history\save.ps1）"
+Write-Host "• 会话采集为手动：Claude 用 /session-memory save；Codex 用 `$session-memory save（或 scripts\session-history\save.ps1）"
 Write-Host ""
-Write-Host "完成。新开一个 Claude Code 会话即可生效。"
+Write-Host "完成。新开 Claude Code 或 Codex 会话即可生效。"

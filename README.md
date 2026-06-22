@@ -76,7 +76,7 @@ bash scripts/install-mac.sh        # 需要 jq 才能自动合并 settings/hooks
 1. 把 `~/.claude/projects/<编码项目名>/memory` 链接到本仓库 `memory/`；
 2. 在 `~/.claude/CLAUDE.md` 写入一行 `@<仓库>/CLAUDE.md` 引用全局规则；
 3. 把 `settings/settings.shared.json` 合并进 `~/.claude/settings.json`（修改前自动备份为 `.bak`）；
-4. 链接 `skills/` 下技能到 `~/.claude/skills/`（含 `session-memory`）；
+4. 链接 `skills/` 下技能到 Claude 的 `~/.claude/skills/` 与 Codex 的 `~/.agents/skills/`（含 `session-memory`）；
 5. 安装 **memory-sync** hooks：**SessionStart** 拉取、**SessionEnd** 提交推送【记忆仓库】。
    （会话采集**不装 hook**——改为手动 `/session-memory save`；install 还会清理历史装过的采集 hook。）
 
@@ -84,7 +84,7 @@ bash scripts/install-mac.sh        # 需要 jq 才能自动合并 settings/hooks
 
 ## 日常使用
 - 记忆同步**无需手动操作**：开会话时自动 `git pull`，结束时自动 `commit` + `push` 记忆仓库。
-- 会话历史是**手动**的：需要时在项目里运行 `/session-memory save|read|get`。
+- 会话历史是**手动**的：Claude 中运行 `/session-memory save|read|get`；Codex 中运行 `$session-memory save|read|get`。
 - 记忆与规则的写入会随 `memory/`、`CLAUDE.md` 一起被提交。
 - 手动兜底（同步记忆仓库，任何时候都能跑）：
   - Windows：`powershell -File scripts\memory-sync\sync.ps1`
