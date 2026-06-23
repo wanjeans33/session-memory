@@ -72,6 +72,32 @@ cd ~/Github_project/claude-session-memory
 bash scripts/install-mac.sh        # 需要 jq 才能自动合并 settings/hooks：brew install jq
 ```
 
+### 可选：通过 npm CLI 安装
+
+公开的 npm CLI 只负责安装和维护流程，**不会**发布或上传你的个人记忆。你的记忆仍保存在自己的私有 Git 仓库中。
+
+首次在新机器安装（默认 clone 到 macOS/Linux 的 `~/.local/share/session-memory`，或 Windows 的
+`%LOCALAPPDATA%\session-memory`）：
+
+```bash
+npx @wanjeans/session-memory init --repo-url <你的私有仓库地址>
+```
+
+已有本地 clone 时，不要再 clone 一份，改用：
+
+```bash
+npx @wanjeans/session-memory install --repo-dir <本地仓库路径>
+```
+
+常用维护命令：
+
+```bash
+npx @wanjeans/session-memory doctor
+npx @wanjeans/session-memory update
+```
+
+所有会修改本机的命令都支持 `--dry-run` 预览；`init` 也可用 `--dir <路径>` 覆盖默认 clone 目录。
+
 安装脚本做了什么（两端一致、幂等、可重复运行）：
 1. 把 `~/.claude/projects/<编码项目名>/memory` 链接到本仓库 `memory/`；
 2. 在 `~/.claude/CLAUDE.md` 写入一行 `@<仓库>/CLAUDE.md` 引用全局规则；
