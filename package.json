@@ -1,0 +1,39 @@
+{
+  "name": "@wanjeans/session-memory",
+  "version": "0.1.0",
+  "description": "Bootstrap and maintain a private cross-device session-memory repository for Claude Code and Codex.",
+  "type": "module",
+  "bin": {
+    "session-memory": "bin/session-memory.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "LICENSE",
+    "README.en.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wanjeans33/session-memory.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wanjeans33/session-memory/issues"
+  },
+  "homepage": "https://github.com/wanjeans33/session-memory#readme",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "agent-skills",
+    "session-memory"
+  ]
+}

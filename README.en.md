@@ -78,6 +78,31 @@ cd ~/Github_project/claude-session-memory
 bash scripts/install-mac.sh        # needs jq to auto-merge settings/hooks: brew install jq
 ```
 
+### Optional: install with the npm CLI
+
+The public npm CLI only manages installation and maintenance. It never publishes or uploads your personal memory; that data remains in your private Git repository.
+
+To install on a new machine, cloning by default into `~/.local/share/session-memory` on macOS/Linux or `%LOCALAPPDATA%\session-memory` on Windows:
+
+```bash
+npx @wanjeans/session-memory init --repo-url <your-private-repository-url>
+```
+
+If you already have a local clone, do not clone another copy. Use:
+
+```bash
+npx @wanjeans/session-memory install --repo-dir <local-repository-path>
+```
+
+Maintenance commands:
+
+```bash
+npx @wanjeans/session-memory doctor
+npx @wanjeans/session-memory update
+```
+
+Every command that changes the machine supports `--dry-run`; `init` also accepts `--dir <path>` to override the default clone directory.
+
 What the installer does (identical on both, idempotent, re-runnable):
 1. Links `~/.claude/projects/<encoded-project>/memory` → this repo's `memory/`;
 2. Adds one line `@<repo>/CLAUDE.md` to `~/.claude/CLAUDE.md` to import global rules;
