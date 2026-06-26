@@ -2,7 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![platform](https://img.shields.io/badge/Windows-%E2%9C%85%20tested-success)
-![platform](https://img.shields.io/badge/macOS%20%2F%20Linux-%E2%9A%A0%EF%B8%8F%20scripts%20ready%2C%20needs%20testing-orange)
+![platform](https://img.shields.io/badge/macOS%20%2F%20Linux-Node-blue)
+![node](https://img.shields.io/badge/Node.js-%E2%89%A520-339933)
 
 [Chinese](README.md) · **English**
 
@@ -13,6 +14,10 @@ into **per-project progress records** (`session-history/`, see "Multi-endpoint s
 Core idea: **use one git repo as the single source of truth**, and let Claude Code read/write
 those files **in place** via symlinks / directory junctions; git handles cross-machine sync.
 This is also the only way to reach iPhone (see below).
+
+> 🟢 **Everything is implemented in Node.js (one codebase for Windows / macOS / Linux)**, requiring
+> only **Node ≥ 20** and **git**. No PowerShell, bash, or jq needed — install, memory sync, and
+> session capture all go through one CLI (`bin/session-memory.mjs`).
 
 > 🧩 **This is a public template repository.** Do **not** store your personal memory in this
 > public repo. The right way: click **Use this template** (or fork) to create **your own repo and
@@ -27,8 +32,8 @@ This is also the only way to reach iPhone (see below).
 
 | Platform | Status | Notes |
 |---|---|---|
-| Windows (`.ps1`) | ✅ End-to-end tested | PowerShell 5.1+ |
-| macOS / Linux (`.sh`) | ⚠️ Scripts ready, community testing wanted | Needs `jq` (`brew install jq`); some features use `perl`/`uuidgen` |
+| Windows | ✅ End-to-end tested | Node ≥ 20 + git; junctions (no admin needed) |
+| macOS / Linux | ✅ Same Node codebase | Node ≥ 20 + git; symlinks. No jq / bash |
 | iPhone | ✅ Cloud / remote | See the "iPhone" section |
 
 ---
@@ -63,19 +68,21 @@ On GitHub, click **Use this template → Create a new repository** and set **Vis
 > Prefer not to use the GitHub template? Start from scratch: `git init` locally, then
 > `gh repo create <name> --private --source . --push`.
 
+The install entry point is identical on every platform — `node bin/session-memory.mjs install`
+(create links + import + merge settings/hooks).
+
 ### 1. First machine (Windows)
 ```powershell
 git clone <your-private-repo-url> <local-path>\claude-session-memory
 cd <local-path>\claude-session-memory
-# Wire into Claude Code (junction + import + merge settings/hooks)
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-windows.ps1
+node bin/session-memory.mjs install
 ```
 
 ### 2. Other machines (macOS / Linux)
 ```bash
 git clone <your-private-repo-url> ~/Github_project/claude-session-memory
 cd ~/Github_project/claude-session-memory
-bash scripts/install-mac.sh        # needs jq to auto-merge settings/hooks: brew install jq
+node bin/session-memory.mjs install
 ```
 
 ### Optional: install with the npm CLI
@@ -103,14 +110,15 @@ npx @wanjeans/session-memory update
 
 Every command that changes the machine supports `--dry-run`; `init` also accepts `--dir <path>` to override the default clone directory.
 
-What the installer does (identical on both, idempotent, re-runnable):
-1. Links `~/.claude/projects/<encoded-project>/memory` → this repo's `memory/`;
+What `install` does (identical on every OS, idempotent, re-runnable):
+1. Links `~/.claude/projects/<encoded-project>/memory` → this repo's `memory/` (junction on Windows, symlink elsewhere);
 2. Adds one line `@<repo>/CLAUDE.md` to `~/.claude/CLAUDE.md` to import global rules;
 3. Merges `settings/settings.shared.json` into `~/.claude/settings.json` (backs up to `.bak` first);
 4. Links skills under `skills/` into Claude's `~/.claude/skills/` and Codex's `~/.agents/skills/` (incl. `session-memory`);
 5. Installs **memory-sync** hooks: **SessionStart** pulls, **SessionEnd** commits & pushes the
-   memory repo. (Session capture installs **no** hook — it's the manual `/session-memory save`;
-   the installer also cleans up any legacy capture hooks.)
+   memory repo (the hook command is `node …/bin/session-memory.mjs sync`). (Session capture installs
+   **no** hook — it's the manual `/session-memory save`; the installer also cleans up any legacy
+   capture hooks and old `.ps1/.sh` sync hooks.)
 
 ---
 
@@ -118,9 +126,8 @@ What the installer does (identical on both, idempotent, re-runnable):
 - Memory sync is **automatic**: `git pull` on session start, `commit` + `push` on session end.
 - Session history is **manual**: in Claude run `/session-memory save|read|get`; in Codex run `$session-memory save|read|get`.
 - Memory and rule edits get committed alongside `memory/` and `CLAUDE.md`.
-- Manual fallback (sync the memory repo anytime):
-  - Windows: `powershell -File scripts\memory-sync\sync.ps1`
-  - macOS: `bash scripts/memory-sync/sync.sh`
+- Manual fallback (sync the memory repo anytime, same on every OS):
+  - `node bin/session-memory.mjs sync` (pull only: add `--pull-only`)
 - To make memory apply to **all** projects: the import in `~/.claude/CLAUDE.md` already loads it
   globally (which in turn imports `memory/MEMORY.md`).
 
@@ -150,16 +157,24 @@ There is **no local Claude Code** on iPhone. Two viable paths:
 ├── settings/settings.shared.json
 ├── skills/
 │   └── session-memory/       # Manual skill: save / read / get subcommands
-└── scripts/
-    ├── install-windows.ps1 / install-mac.sh    # Install entry points (both subsystems)
-    ├── memory-sync/          # (1) Memory sync: sync.* (pull/commit/push this repo, auto hook)
-    └── session-history/      # (2) Session history (fully manual)
-        ├── save.*            #     Capture current/all sessions into session-history/
-        ├── read.*            #     Import other-endpoint sessions into the current endpoint (CLI + Desktop)
-        ├── repo-status.*     #     Enumerate branches/worktrees → index.json
-        ├── build-status.*    #     Aggregate digests by branch (consumed by get)
-        └── capture/          #     Adapters: claude-scrape / codex-scrape / desktop-scrape / _lib
+├── bin/session-memory.mjs    # CLI entry point (single entry for every command)
+└── lib/                      # Node implementation (one codebase, all platforms)
+    ├── main.mjs              #   Command dispatch
+    ├── args.mjs / paths.mjs  #   Arg parsing / cross-platform paths
+    ├── commands/             #   install · sync · save · read · repo-status · build-status
+    ├── capture/              #   Capture adapters: claude · codex · desktop
+    └── util/                 #   git · redact · transcript · digest · run
 ```
+
+CLI commands (see `node bin/session-memory.mjs --help`):
+
+| Command | Purpose |
+|---|---|
+| `init` / `install` / `update` / `doctor` | Install & maintain (clone, wire up, upgrade, self-check) |
+| `sync [--pull-only]` | (1) Memory sync: pull / (commit + push) the memory repo (used by hooks) |
+| `save [--all] [--commit]` | (2) Capture current / all endpoints' sessions into `session-history/` |
+| `read --list \| --import --ids …` | (2) Import other endpoints into the current client's list (CLI + Desktop) |
+| `repo-status` / `build-status` | (2) Branch/worktree index + per-branch aggregation (consumed by `get`) |
 
 > Two subsystems: **(1) Memory sync** (CLAUDE.md + memory, stable rules/facts shared across
 > machines, **automatic**) and **(2) Session history** (per-project progress, **manual** via
@@ -182,9 +197,9 @@ sessions into project progress** (design: [DESIGN.md](DESIGN.md)). **Fully manua
 - **`/session-memory get`** — combines `session-history/` + branch/worktree index + `memory/`
   into a `STATUS.md`: which branch does what, recent sessions, open threads, next steps.
 
-Underlying scripts: `scripts/session-history/{save,read,repo-status,build-status}.*` +
-`capture/{claude,codex,desktop}-scrape.*`. You can also run them directly (e.g. `save.ps1 -All`,
-`read.ps1 -List`).
+Underlying implementation: `lib/commands/{save,read,repo-status,build-status}.mjs` +
+`lib/capture/{claude,codex,desktop}.mjs`. You can also run them directly (e.g.
+`node bin/session-memory.mjs save --all`, `… read --list`).
 
 > **No automatic hook**: capture only happens when you run `save`. Memory-sync remains automatic.
 
@@ -192,9 +207,9 @@ Underlying scripts: `scripts/session-history/{save,read,repo-status,build-status
 > `session-history/` lands in the **target project** repo — keep that repo private and add a
 > secret-scan in CI as a backstop. Redaction can never be 100%.
 >
-> **Platform**: Windows (`.ps1`) is end-to-end verified. The macOS/Linux `.sh` versions depend on
-> `jq`/`perl` and have **not yet been verified on a real machine** — double-check the output on
-> your first macOS run.
+> **Platform**: implemented in pure Node (one codebase for all platforms), requiring only Node ≥ 20
+> and git. Windows is end-to-end verified; macOS/Linux run the same code and the same commands —
+> still worth double-checking the output on your first run.
 
 ## Security
 - **Use a private repo only** (for your data). `.gitignore` excludes `.credentials.json`,

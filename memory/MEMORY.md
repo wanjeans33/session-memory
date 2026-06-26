@@ -10,5 +10,4 @@
 <!-- 下面两条是关于本工具自身的参考记忆（模板自带）。从模板创建你自己的私有库后，
      可保留它们做参考，也可清空换成你自己的事实。 -->
 
-- [多端会话记忆系统](session-history-system.md) — 手动 skill session-memory：save/read/get 跨端采集·导入·综合
-- [.ps1 需 UTF-8 BOM](ps1-utf8-bom.md) — 否则中文注释在 PS5.1 下解析失败
+- [多端会话记忆系统](session-history-system.md) — 手动 skill session-memory：save/read/get 跨端采集·导入·综合（实现为一套 Node CLI）
