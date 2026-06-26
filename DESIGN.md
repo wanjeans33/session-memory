@@ -4,8 +4,11 @@
 > 都在**对应项目仓库**里留下一条可检索的进度记录；再由一个技能把这些记录 + 仓库的
 > **分支/worktree 状态** + `memory/` 综合成一份 **Project Status**。
 >
-> 本仓库（`claude-session-memory`）是**基础设施 + 全局记忆**的来源：脚本与技能写在这里，
+> 本仓库（`claude-session-memory`）是**基础设施 + 全局记忆**的来源：实现（Node CLI）与技能写在这里，
 > 安装后 link 到各机器的 `~/.claude/`，运行时把记录写进**各目标项目**的 `session-history/`。
+>
+> **实现**：全部为 Node.js（`bin/session-memory.mjs` + `lib/`），一套代码覆盖 Windows / macOS / Linux，
+> 只依赖 Node ≥ 20 与 git（不再有 `.ps1`/`.sh` 两套）。
 
 ## 已定决策（2026-06-17）
 
@@ -54,9 +57,9 @@
 
 **提交策略：** `save` **只写文件，默认不自动 commit**（避免在你正在干活的分支上插入意外提交）。
 - 默认：文件出现在工作树里，随你下次正常 commit 带走，或 `get` 时统一 commit。
-- 显式提交：`save -Commit`（mac `--commit`）只 `git add session-history/` 后单独提交（绝不 `add -A`）。取代了旧的 `SESSION_HISTORY_AUTOCOMMIT` 环境开关。
+- 显式提交：`save --commit` 只 `git add session-history/` 后单独提交（绝不 `add -A`）。取代了旧的 `SESSION_HISTORY_AUTOCOMMIT` 环境开关。
 
-**采集触发：** 全手动，无 hook。`save -Current` 采当前会话、`save -All` 扫本机所有端（Claude CLI/Desktop + Codex）。
+**采集触发：** 全手动，无 hook。默认 `save` 采当前会话、`save --all` 扫本机所有端（Claude CLI/Desktop + Codex）。
 （旧的"全局/按 repo 采集 hook"与 `enable-capture-here` 已移除。）
 
 ---
@@ -85,7 +88,7 @@
   "turns": 12,                     // 用户回合数（粗略）
   "first_prompt": "嗯我现在想明白这一个架构…",   // 截断到 ~200 字
   "summary": "",                   // 一句话；采集时留空，由技能懒生成
-  "files_touched": ["scripts/memory-sync/sync.ps1", "DESIGN.md"],
+  "files_touched": ["lib/commands/sync.mjs", "DESIGN.md"],
   "tools_used": {"Edit": 9, "Bash": 4, "Write": 3},
   "next_steps": [],                // 可由技能填
   "transcript_ref": "session-history/transcripts/2026-06-17_153012-claude-18f57795.jsonl"
@@ -102,13 +105,13 @@
 
 ## 4. 各技术栈采集方式
 
-全部由 `save` 手动驱动（`save -Current` 只采当前会话；`save -All` 调用下面三个适配器全扫）。
+全部由 `save` 手动驱动（默认 `save` 只采当前会话；`save --all` 调用下面三个适配器全扫）。
 
-| 端 | 原始存储 | 采集脚本（由 save 调用） |
+| 端 | 原始存储 | 采集模块（由 save 调用） |
 |---|---|---|
-| **Claude Code CLI / Desktop** | `~/.claude/projects/<encoded>/*.jsonl`（Desktop 也走内置 CLI 写这里） | `capture/claude-scrape.{ps1,sh}`：`-Current`（cwd 对应项目里最新一条）/ `-All`（扫全部） |
-| **Codex CLI** | `~/.codex/sessions/Y/M/D/rollout-*.jsonl` | `capture/codex-scrape.{ps1,sh}`（按 mtime 增量，游标 `~/.claude/.codex-scrape-cursor`） |
-| **Claude Desktop（元数据增强）** | `%APPDATA%\Claude\claude-code-sessions\**\local_*.json`（cliSessionId/cwd/branch/title…）+ 真 transcript 同上 | `capture/desktop-scrape.{ps1,sh}`（按 cliSessionId 找 transcript，复用解析，用 title/branch 增强、去重；游标 `~/.claude/.desktop-scrape-cursor`） |
+| **Claude Code CLI / Desktop** | `~/.claude/projects/<encoded>/*.jsonl`（Desktop 也走内置 CLI 写这里） | `lib/capture/claude.mjs`：`scrapeClaude({current})`（cwd 对应项目里最新一条）/ `{all}`（扫全部） |
+| **Codex CLI** | `~/.codex/sessions/Y/M/D/rollout-*.jsonl` | `lib/capture/codex.mjs`（按 mtime 增量，游标 `~/.claude/.codex-scrape-cursor`，单位毫秒；旧 .NET ticks 视为过期重扫） |
+| **Claude Desktop（元数据增强）** | `%APPDATA%\Claude\claude-code-sessions\**\local_*.json`（macOS：`~/Library/Application Support/Claude/…`）+ 真 transcript 同上 | `lib/capture/desktop.mjs`（按 cliSessionId 找 transcript，复用解析，用 title/branch 增强、去重；游标 `~/.claude/.desktop-scrape-cursor`） |
 | **Cloud / iPhone** | 云端 VM / 无本地 | 未做（Cloud）/ 归宿主机 |
 
 > 不追求"跨端实时 resume"——各 OS 把项目绝对路径编码成不同文件夹名，且记录内嵌绝对路径，技术上做不到。
@@ -132,7 +135,7 @@
 
 ## 6. 分支 / worktree 状态索引
 
-`scripts/session-history/repo-status.{ps1,sh}` 对给定仓库输出 `index.json`：
+`lib/commands/repo-status.mjs`（CLI：`repo-status`）对给定仓库输出 `index.json`：
 
 ```jsonc
 {
@@ -157,13 +160,15 @@
 
 `skills/session-memory/SKILL.md`，description 写成"仅显式调用"以**不自动触发**。三个子命令：
 
-- **save**：问"全部/仅当前"→ `save.{ps1,sh} -Current|-All [-Commit]`。
+- **save**：问"全部/仅当前"→ `session-memory save [--all] [--commit]`。
 - **read**：把账本里其它端会话注入当前端列表（见 §7.1）。
 - **get**：① 跑 `repo-status` 刷 `index.json`；② `build-status` 按分支聚合；③ 读 `memory/`；④ 综合写 `STATUS.md`。
 
-### 7.1 read — 跨端导入（`read.{ps1,sh}`）
-- `-List`：列本项目 `session-history/` 候选（base、tool、machine、title）。
-- `-Import -Ids … -Targets cli,desktop`：
+> 所有命令统一为 `node "<repo>/bin/session-memory.mjs" <子命令>`，三端一致。
+
+### 7.1 read — 跨端导入（`lib/commands/read.mjs`，CLI：`read`）
+- `--list`：列本项目 `session-history/` 候选（base、tool、machine、title）。
+- `--import --ids … --targets cli,desktop`：
   - **Claude 来源**（claude-cli/claude-desktop）：transcript 已是 Claude jsonl → 复制成 `~/.claude/projects/<encode(cwd)>/<新uuid>.jsonl`，首条 user 消息前缀来源标签 `(cli)`/`(desktop)`。
   - **Codex 来源**：rollout 非 Claude 格式 → 生成最小占位 jsonl（first_prompt + 指向脱敏原文的说明），标签 `(codex)`。
   - **CLI 目标**：上面的 jsonl 即可被 `claude --resume` 列出。
@@ -174,13 +179,14 @@
 
 ## 8. 路线图
 
-- **Phase 0** 收口与版本化：skill 进仓库；建 `scripts/session-history/capture/`；install 改为 link skills + 挂 hook。
+- **Phase 0** 收口与版本化：skill 进仓库；建采集适配器层；install 改为 link skills + 挂 hook。
 - **Phase 1** Claude CLI 采集 + 脱敏。
 - **Phase 2** `repo-status` 分支/worktree 索引。
 - **Phase 3** `session-share` 综合技能。
 - **Phase 4** Codex 适配器。
-- **Phase 5** Desktop 适配器 ✅（`desktop-scrape`）；Cloud 适配器（committed `Stop` hook）未做。
+- **Phase 5** Desktop 适配器 ✅（`desktop`）；Cloud 适配器（committed `Stop` hook）未做。
 - **Phase 6** 硬化：密钥扫描 CI、跨 OS path-map、并发回归。
 - **Phase 7** ✅ 交互重构：取消自动触发；统一手动 skill `session-memory`（save/read/get）；新增 read 跨端导入。
+- **Phase 8** ✅ 实现重写：`.ps1`/`.sh` 全部移植为一套 Node CLI（`bin/session-memory.mjs` + `lib/`），三端同源；install/sync/采集/索引均原生 Node，去除 jq / PowerShell / bash 依赖。
 
-> 已交付：Phase 0–5 + 7（Desktop 已含；Cloud、跨 OS path-map 待做）。
+> 已交付：Phase 0–5 + 7 + 8（Desktop 已含；Cloud、跨 OS path-map 待做）。

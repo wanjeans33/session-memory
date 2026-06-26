@@ -1,6 +1,4 @@
-# Shell 脚本必须用 LF，否则在 macOS/Linux 上无法执行
-*.sh   text eol=lf
-# PowerShell 脚本用 CRLF
-*.ps1  text eol=crlf
+# Node 源码统一用 LF
+*.mjs  text eol=lf
 # 会话记录归档：当作文本但保持原样、不参与 diff
 *.jsonl -diff

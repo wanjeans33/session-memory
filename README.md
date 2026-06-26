@@ -2,7 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![platform](https://img.shields.io/badge/Windows-%E2%9C%85%20tested-success)
-![platform](https://img.shields.io/badge/macOS%20%2F%20Linux-%E2%9A%A0%EF%B8%8F%20scripts%20ready%2C%20needs%20testing-orange)
+![platform](https://img.shields.io/badge/macOS%20%2F%20Linux-Node-blue)
+![node](https://img.shields.io/badge/Node.js-%E2%89%A520-339933)
 
 **中文** · [English](README.en.md)
 
@@ -11,6 +12,9 @@
 
 核心思路：**用一个 git 仓库作为唯一可信源**，通过软链接 / 目录联接（junction）让 Claude Code
 **就地**读写这些文件；git 负责跨机同步。这也是唯一能覆盖到 iPhone 的方式（见下文）。
+
+> 🟢 **全部逻辑用 Node.js 实现（一套代码覆盖 Windows / macOS / Linux）**，只依赖 **Node ≥ 20** 与 **git**。
+> 不再需要 PowerShell、bash 或 jq——安装、记忆同步、会话采集都走同一个 CLI（`bin/session-memory.mjs`）。
 
 > 🧩 **这是一个公开「模板仓库」。** 别直接往这个公开仓库存你的个人记忆。
 > 正确用法：点 **Use this template**（或 fork）生成**你自己的仓库并设为 Private**，再 clone 下来
@@ -23,8 +27,8 @@
 
 | 平台 | 状态 | 说明 |
 |---|---|---|
-| Windows（`.ps1`） | ✅ 已端到端验证 | PowerShell 5.1+ |
-| macOS / Linux（`.sh`） | ⚠️ 脚本完成、待社区实测 | 需 `jq`（`brew install jq`）；部分功能用 `perl`/`uuidgen` |
+| Windows | ✅ 已端到端验证 | Node ≥ 20 + git；目录联接用 junction（免管理员） |
+| macOS / Linux | ✅ 同一套 Node 代码 | Node ≥ 20 + git；用符号链接。无需 jq / bash |
 | iPhone | ✅ 云端/远程 | 见下方「iPhone」一节 |
 
 ---
@@ -57,19 +61,20 @@
 >
 > 不想用 GitHub 模板？也可以从零开始：本地 `git init` 后 `gh repo create <名字> --private --source . --push`。
 
+安装入口在三端完全一致——`node bin/session-memory.mjs install`（创建链接 + import + 合并 settings/hooks）。
+
 ### 1. 第一台机器（Windows）
 ```powershell
 git clone <你的私有仓库地址> <本地路径>\claude-session-memory
 cd <本地路径>\claude-session-memory
-# 接入 Claude Code（创建 junction + import + 合并 settings/hooks）
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-windows.ps1
+node bin/session-memory.mjs install
 ```
 
 ### 2. 其它机器（macOS / Linux）
 ```bash
 git clone <你的私有仓库地址> ~/Github_project/claude-session-memory
 cd ~/Github_project/claude-session-memory
-bash scripts/install-mac.sh        # 需要 jq 才能自动合并 settings/hooks：brew install jq
+node bin/session-memory.mjs install
 ```
 
 ### 可选：通过 npm CLI 安装
@@ -98,13 +103,13 @@ npx @wanjeans/session-memory update
 
 所有会修改本机的命令都支持 `--dry-run` 预览；`init` 也可用 `--dir <路径>` 覆盖默认 clone 目录。
 
-安装脚本做了什么（两端一致、幂等、可重复运行）：
-1. 把 `~/.claude/projects/<编码项目名>/memory` 链接到本仓库 `memory/`；
+`install` 做了什么（三端一致、幂等、可重复运行）：
+1. 把 `~/.claude/projects/<编码项目名>/memory` 链接到本仓库 `memory/`（Windows 用 junction，其它用符号链接）；
 2. 在 `~/.claude/CLAUDE.md` 写入一行 `@<仓库>/CLAUDE.md` 引用全局规则；
 3. 把 `settings/settings.shared.json` 合并进 `~/.claude/settings.json`（修改前自动备份为 `.bak`）；
 4. 链接 `skills/` 下技能到 Claude 的 `~/.claude/skills/` 与 Codex 的 `~/.agents/skills/`（含 `session-memory`）；
-5. 安装 **memory-sync** hooks：**SessionStart** 拉取、**SessionEnd** 提交推送【记忆仓库】。
-   （会话采集**不装 hook**——改为手动 `/session-memory save`；install 还会清理历史装过的采集 hook。）
+5. 安装 **memory-sync** hooks：**SessionStart** 拉取、**SessionEnd** 提交推送【记忆仓库】（hook 命令即 `node …/bin/session-memory.mjs sync`）。
+   （会话采集**不装 hook**——改为手动 `/session-memory save`；install 还会清理历史装过的采集 hook 与旧的 `.ps1/.sh` 同步 hook。）
 
 ---
 
@@ -112,9 +117,8 @@ npx @wanjeans/session-memory update
 - 记忆同步**无需手动操作**：开会话时自动 `git pull`，结束时自动 `commit` + `push` 记忆仓库。
 - 会话历史是**手动**的：Claude 中运行 `/session-memory save|read|get`；Codex 中运行 `$session-memory save|read|get`。
 - 记忆与规则的写入会随 `memory/`、`CLAUDE.md` 一起被提交。
-- 手动兜底（同步记忆仓库，任何时候都能跑）：
-  - Windows：`powershell -File scripts\memory-sync\sync.ps1`
-  - macOS：`bash scripts/memory-sync/sync.sh`
+- 手动兜底（同步记忆仓库，任何时候都能跑，三端一致）：
+  - `node bin/session-memory.mjs sync`（仅拉取：加 `--pull-only`）
 - 让记忆对**所有项目**生效：`~/.claude/CLAUDE.md` 的 import 已实现全局加载（其中又 import 了
   `memory/MEMORY.md`）。
 
@@ -142,16 +146,24 @@ iPhone 上**没有本地 Claude Code**，两条可用路径：
 ├── settings/settings.shared.json
 ├── skills/
 │   └── session-memory/       # 手动 skill：save / read / get 三个子命令
-└── scripts/
-    ├── install-windows.ps1 / install-mac.sh    # 安装入口（接两套子系统）
-    ├── memory-sync/          # ① 记忆同步：sync.*（拉取/提交/推送本仓库，自动 hook）
-    └── session-history/      # ② 会话历史（全手动）
-        ├── save.*            #    采集当前/全部会话入 session-history/
-        ├── read.*            #    把其它端会话导入当前端列表（CLI + Desktop）
-        ├── repo-status.*     #    枚举分支/worktree → index.json
-        ├── build-status.*    #    汇聚 digests 按分支分组（供 get 消费）
-        └── capture/          #    适配器：claude-scrape / codex-scrape / desktop-scrape / _lib
+├── bin/session-memory.mjs    # CLI 入口（所有命令的统一入口）
+└── lib/                      # Node 实现（一套代码覆盖三端）
+    ├── main.mjs              #   命令分发
+    ├── args.mjs / paths.mjs  #   参数解析 / 跨平台路径
+    ├── commands/             #   install · sync · save · read · repo-status · build-status
+    ├── capture/              #   采集适配器：claude · codex · desktop
+    └── util/                 #   git · redact · transcript · digest · run
 ```
+
+CLI 命令一览（详见 `node bin/session-memory.mjs --help`）：
+
+| 命令 | 作用 |
+|---|---|
+| `init` / `install` / `update` / `doctor` | 安装与维护（克隆、接入、升级、自检） |
+| `sync [--pull-only]` | ① 记忆同步：拉取 /（提交 + 推送）记忆仓库（hook 调用） |
+| `save [--all] [--commit]` | ② 会话采集：当前 / 全部端会话入 `session-history/` |
+| `read --list \| --import --ids …` | ② 跨端导入到当前端列表（CLI + Desktop） |
+| `repo-status` / `build-status` | ② 分支/worktree 索引 + 按分支聚合（供 `get` 消费） |
 
 > 两个子系统：**① 记忆同步**（CLAUDE.md + memory，跨机共享稳定规则/事实，**自动**）与
 > **② 会话历史**（按项目沉淀进度，**手动** `/session-memory`）。各自独立。
@@ -170,16 +182,16 @@ iPhone 上**没有本地 Claude Code**，两条可用路径：
 - **`/session-memory get`** — 综合 `session-history/` + 分支/worktree 索引 + `memory/`，生成 `STATUS.md`：
   哪条分支在做什么、最近会话、未完成线索、下一步。
 
-底层脚本：`scripts/session-history/{save,read,repo-status,build-status}.*` + `capture/{claude,codex,desktop}-scrape.*`。
-也可直接命令行跑这些脚本（如 `save.ps1 -All`、`read.ps1 -List`）。
+底层实现：`lib/commands/{save,read,repo-status,build-status}.mjs` + `lib/capture/{claude,codex,desktop}.mjs`。
+也可直接命令行跑（如 `node bin/session-memory.mjs save --all`、`… read --list`）。
 
 > **无自动 hook**：采集只在你运行 `save` 时发生（决定取消了一切自动触发）。记忆同步（memory-sync）仍是自动的。
 
 > **隐私**：原文为 **best-effort 脱敏**（密钥/令牌→`[REDACTED:*]`）。`session-history/` 会进**目标项目**仓库，
 > 务必保证该仓库私有，并在 CI 加密钥扫描兜底。脱敏不可能 100% 覆盖。
 >
-> **平台**：Windows（`.ps1`）已在本机端到端验证。**macOS/Linux 的 `.sh` 版本依赖 `jq`/`perl`，
-> 尚未在本机验证**——首次在 Mac 上运行请核对输出。
+> **平台**：实现为纯 Node（一套代码覆盖三端），只依赖 Node ≥ 20 与 git。Windows 已端到端验证；
+> macOS/Linux 走同一套代码与同样的命令，首次运行仍建议核对输出。
 
 ## 安全
 - **只用私有仓库。** `.gitignore` 排除 `.credentials.json`、`*.key`、`*.pem`、`*.token` 等。
