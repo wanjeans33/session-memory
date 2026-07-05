@@ -27,6 +27,10 @@
    push 被拒时自动 `pull --rebase` 重试（至多 3 次）。
 10. **read/get 多人化**：`read --list` 递归扫描并输出 `author` 列，支持 `--author <handle>` 过滤；
     导入标题标签带来源人 `(codex@alice) …`；`build-status` 每分支输出 `authors` 汇总。
+11. **skills-only 安装**：`install --skills-only` 只把 skill 链接进目标项目（开启该项目的会话共享），
+    不做记忆 junction / CLAUDE.md import / settings / hooks——协作者 clone **公开仓库**即可用，
+    不会有任何个人数据被自动 push。CLI 从完整 clone 里运行时自动把该 clone 作为 repo-dir
+    （无需先 `init` 或 `--repo-dir`）。
 
 ## 已定决策（2026-06-23，交互改为手动命令）
 3. **取消一切自动触发**：删除 SessionEnd 采集 hook、删除 skill 的 description 自动触发。

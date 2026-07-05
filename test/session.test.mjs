@@ -62,6 +62,41 @@ test('relFiles makes paths relative to root with forward slashes', () => {
   assert.deepEqual(relFiles(['E:\\proj\\src\\a.js', 'E:\\other\\b.js'], 'E:\\proj'), ['src/a.js', 'E:/other/b.js']);
 });
 
+test('installNative --skills-only links skills but leaves memory sync, CLAUDE.md, and settings untouched', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'session-memory-skillsonly-'));
+  const repo = path.join(root, 'memory-repo');
+  const project = path.join(root, 'target-project');
+  const home = path.join(root, 'home');
+
+  try {
+    mkdirSync(path.join(repo, '.git'), { recursive: true });
+    mkdirSync(path.join(repo, 'skills', 'session-memory'), { recursive: true });
+    mkdirSync(path.join(repo, 'settings'), { recursive: true });
+    mkdirSync(project, { recursive: true });
+
+    installNative(
+      repo,
+      {
+        home,
+        claudeDir: path.join(home, '.claude'),
+        codexSkillsDir: path.join(home, '.agents', 'skills'),
+      },
+      { projectDir: project, skillsOnly: true }
+    );
+
+    const sourceSkill = path.join(repo, 'skills', 'session-memory');
+    assert.equal(realpathSync(path.join(project, '.claude', 'skills', 'session-memory')), realpathSync(sourceSkill));
+    assert.equal(realpathSync(path.join(project, '.agents', 'skills', 'session-memory')), realpathSync(sourceSkill));
+    // Nothing personal was wired up.
+    assert.equal(existsSync(path.join(home, '.claude', 'CLAUDE.md')), false);
+    assert.equal(existsSync(path.join(home, '.claude', 'settings.json')), false);
+    assert.equal(existsSync(path.join(home, '.claude', 'projects')), false);
+    assert.equal(existsSync(path.join(repo, 'memory')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('installNative installs skills into the target project, not global skill folders', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'session-memory-install-'));
   const repo = path.join(root, 'memory-repo');
