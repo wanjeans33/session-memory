@@ -10,6 +10,13 @@ test('parses init options', () => {
   });
 });
 
+test('parses project-dir option', () => {
+  assert.deepEqual(parseArgs(['install', '--repo-dir', '/tmp/memory', '--project-dir=/tmp/work']), {
+    command: 'install',
+    options: { 'repo-dir': '/tmp/memory', 'project-dir': '/tmp/work' },
+  });
+});
+
 test('rejects unknown and missing option values', () => {
   assert.throws(() => parseArgs(['init', '--unknown']), /Unknown option/);
   assert.throws(() => parseArgs(['init', '--repo-url']), /requires a value/);

@@ -9,7 +9,8 @@ metadata:
 
 **实现已统一为一套 Node CLI**（`bin/session-memory.mjs` + `lib/`），三端同源，只依赖 Node ≥ 20 与 git。命令形式：`node "<repo>/bin/session-memory.mjs" <子命令>`。
 
-**全手动**，一个 skill `skills/session-memory/`，三个子命令（`/session-memory <子命令>`）：
+**全手动**，一个 skill `skills/session-memory/`，安装时 link 到目标项目的 `.claude/skills/session-memory` 与 `.agents/skills/session-memory`；
+三个子命令（Claude 用 `/session-memory <子命令>`，Codex 用 `$session-memory <子命令>`）：
 - **save** → `lib/commands/save.mjs`：默认采当前会话 / `--all`（扫 Claude CLI/Desktop + Codex）；`--commit` 显式提交。
 - **read** → `lib/commands/read.mjs`：把本项目 `session-history/` 里其它端会话注入当前端列表
   （CLI `~/.claude/projects/<enc>/<id>.jsonl` + Desktop `local_*.json` 描述符），标题前缀来源标签 `(codex)`/`(cli)`/`(desktop)`。

@@ -4,8 +4,9 @@
 > 都在**对应项目仓库**里留下一条可检索的进度记录；再由一个技能把这些记录 + 仓库的
 > **分支/worktree 状态** + `memory/` 综合成一份 **Project Status**。
 >
-> 本仓库（`claude-session-memory`）是**基础设施 + 全局记忆**的来源：实现（Node CLI）与技能写在这里，
-> 安装后 link 到各机器的 `~/.claude/`，运行时把记录写进**各目标项目**的 `session-history/`。
+> 本仓库（`claude-session-memory`）是**基础设施 + 全局记忆**的来源：Node CLI 与技能源码写在这里。
+> 全局只安装记忆 import 与 memory-sync hook；`session-memory` skill 则 link 到**对应目标项目仓库**的
+> `.claude/skills/` / `.agents/skills/`，运行时把记录写进该目标项目的 `session-history/`。
 >
 > **实现**：全部为 Node.js（`bin/session-memory.mjs` + `lib/`），一套代码覆盖 Windows / macOS / Linux，
 > 只依赖 Node ≥ 20 与 git（不再有 `.ps1`/`.sh` 两套）。
@@ -19,6 +20,7 @@
 3. **取消一切自动触发**：删除 SessionEnd 采集 hook、删除 skill 的 description 自动触发。
 4. **统一为一个手动 skill `session-memory`，三个子命令**：`save`（存会话，问全部/仅当前）、`read`（把其它端会话导入当前端 CLI+Desktop 列表、标题打来源标签）、`get`（综合 STATUS.md，即原 session-share）。
 5. **保留 memory-sync 自动**（CLAUDE.md/memory 的 SessionStart 拉取 / SessionEnd 推送 hook 不变）。
+6. **skill 安装位置 = 项目本地**：Claude 用 `<project>/.claude/skills/session-memory`，Codex 用 `<project>/.agents/skills/session-memory`，都 link 回本仓库 `skills/session-memory`；不再安装到 `~/.claude/skills` 或 `~/.agents/skills`。
 
 ---
 
@@ -158,7 +160,8 @@
 
 ## 7. skill `session-memory`（手动入口）
 
-`skills/session-memory/SKILL.md`，description 写成"仅显式调用"以**不自动触发**。三个子命令：
+`skills/session-memory/SKILL.md` 是源码；安装时 link 到目标项目的 `.claude/skills/session-memory` 与 `.agents/skills/session-memory`。
+description 写成"仅显式调用"以**不自动触发**。三个子命令：
 
 - **save**：问"全部/仅当前"→ `session-memory save [--all] [--commit]`。
 - **read**：把账本里其它端会话注入当前端列表（见 §7.1）。
@@ -179,7 +182,7 @@
 
 ## 8. 路线图
 
-- **Phase 0** 收口与版本化：skill 进仓库；建采集适配器层；install 改为 link skills + 挂 hook。
+- **Phase 0** 收口与版本化：skill 进仓库；建采集适配器层；install 改为 repo-local skill link + 挂 memory-sync hook。
 - **Phase 1** Claude CLI 采集 + 脱敏。
 - **Phase 2** `repo-status` 分支/worktree 索引。
 - **Phase 3** `session-share` 综合技能。

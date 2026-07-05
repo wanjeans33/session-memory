@@ -62,19 +62,20 @@
 > 不想用 GitHub 模板？也可以从零开始：本地 `git init` 后 `gh repo create <名字> --private --source . --push`。
 
 安装入口在三端完全一致——`node bin/session-memory.mjs install`（创建链接 + import + 合并 settings/hooks）。
+`session-memory` skill 会安装到你运行命令时所在的目标项目；也可以用 `--project-dir <目标项目路径>` 显式指定。
 
 ### 1. 第一台机器（Windows）
 ```powershell
 git clone <你的私有仓库地址> <本地路径>\claude-session-memory
 cd <本地路径>\claude-session-memory
-node bin/session-memory.mjs install
+node bin/session-memory.mjs install --project-dir <目标项目路径>
 ```
 
 ### 2. 其它机器（macOS / Linux）
 ```bash
 git clone <你的私有仓库地址> ~/Github_project/claude-session-memory
 cd ~/Github_project/claude-session-memory
-node bin/session-memory.mjs install
+node bin/session-memory.mjs install --project-dir <目标项目路径>
 ```
 
 ### 可选：通过 npm CLI 安装
@@ -94,6 +95,12 @@ npx @wanjeans/session-memory init --repo-url <你的私有仓库地址>
 npx @wanjeans/session-memory install --repo-dir <本地仓库路径>
 ```
 
+如果你是在目标项目里打开的会话，可以直接在那个项目目录运行；skill 会装进当前项目。若在别处运行，则显式传入目标项目：
+
+```bash
+npx @wanjeans/session-memory install --repo-dir <本地仓库路径> --project-dir <目标项目路径>
+```
+
 常用维护命令：
 
 ```bash
@@ -107,7 +114,7 @@ npx @wanjeans/session-memory update
 1. 把 `~/.claude/projects/<编码项目名>/memory` 链接到本仓库 `memory/`（Windows 用 junction，其它用符号链接）；
 2. 在 `~/.claude/CLAUDE.md` 写入一行 `@<仓库>/CLAUDE.md` 引用全局规则；
 3. 把 `settings/settings.shared.json` 合并进 `~/.claude/settings.json`（修改前自动备份为 `.bak`）；
-4. 链接 `skills/` 下技能到 Claude 的 `~/.claude/skills/` 与 Codex 的 `~/.agents/skills/`（含 `session-memory`）；
+4. 链接 `skills/` 下技能到目标项目的 `.claude/skills/` 与 `.agents/skills/`（含 `session-memory`），默认目标项目是当前工作目录；**不会**把 skill 安装到 Claude/Codex 全局 skill 目录；
 5. 安装 **memory-sync** hooks：**SessionStart** 拉取、**SessionEnd** 提交推送【记忆仓库】（hook 命令即 `node …/bin/session-memory.mjs sync`）。
    （会话采集**不装 hook**——改为手动 `/session-memory save`；install 还会清理历史装过的采集 hook 与旧的 `.ps1/.sh` 同步 hook。）
 
@@ -115,7 +122,7 @@ npx @wanjeans/session-memory update
 
 ## 日常使用
 - 记忆同步**无需手动操作**：开会话时自动 `git pull`，结束时自动 `commit` + `push` 记忆仓库。
-- 会话历史是**手动**的：Claude 中运行 `/session-memory save|read|get`；Codex 中运行 `$session-memory save|read|get`。
+- 会话历史是**手动**的：先在当前目标项目里安装 skill；Claude 中运行 `/session-memory save|read|get`，Codex 中运行 `$session-memory save|read|get`。
 - 记忆与规则的写入会随 `memory/`、`CLAUDE.md` 一起被提交。
 - 手动兜底（同步记忆仓库，任何时候都能跑，三端一致）：
   - `node bin/session-memory.mjs sync`（仅拉取：加 `--pull-only`）
@@ -145,7 +152,7 @@ iPhone 上**没有本地 Claude Code**，两条可用路径：
 ├── memory/                   # 文件式记忆：MEMORY.md 索引 + 每条事实一个文件
 ├── settings/settings.shared.json
 ├── skills/
-│   └── session-memory/       # 手动 skill：save / read / get 三个子命令
+│   └── session-memory/       # 手动 skill 源码：save / read / get 三个子命令
 ├── bin/session-memory.mjs    # CLI 入口（所有命令的统一入口）
 └── lib/                      # Node 实现（一套代码覆盖三端）
     ├── main.mjs              #   命令分发
@@ -173,7 +180,7 @@ CLI 命令一览（详见 `node bin/session-memory.mjs --help`）：
 ## 多端会话历史（session-history）
 
 除了同步「记忆」，本仓库还提供一套**把各端 Agent 会话沉淀成项目进度**的系统（设计见 [DESIGN.md](DESIGN.md)）。
-**全手动**，一个 skill `session-memory`，三个子命令（在目标项目里用 `/session-memory <子命令>`）：
+**全手动**，一个 skill `session-memory`，三个子命令（先安装到目标项目的 `.claude/skills/` 或 `.agents/skills/`，再在目标项目里用 `/session-memory <子命令>` 或 `$session-memory <子命令>`）：
 
 - **`/session-memory save`** — 把会话存进**该项目** `session-history/`（digest + 脱敏原文）。会问你：
   保存**全部**端的新会话（扫 Claude CLI/Desktop + Codex）还是只存**当前**这个会话。

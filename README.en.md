@@ -70,19 +70,21 @@ On GitHub, click **Use this template → Create a new repository** and set **Vis
 
 The install entry point is identical on every platform — `node bin/session-memory.mjs install`
 (create links + import + merge settings/hooks).
+The `session-memory` skill is installed into the target project where you run the command; pass
+`--project-dir <target-project-path>` to choose a different project explicitly.
 
 ### 1. First machine (Windows)
 ```powershell
 git clone <your-private-repo-url> <local-path>\claude-session-memory
 cd <local-path>\claude-session-memory
-node bin/session-memory.mjs install
+node bin/session-memory.mjs install --project-dir <target-project-path>
 ```
 
 ### 2. Other machines (macOS / Linux)
 ```bash
 git clone <your-private-repo-url> ~/Github_project/claude-session-memory
 cd ~/Github_project/claude-session-memory
-node bin/session-memory.mjs install
+node bin/session-memory.mjs install --project-dir <target-project-path>
 ```
 
 ### Optional: install with the npm CLI
@@ -101,6 +103,13 @@ If you already have a local clone, do not clone another copy. Use:
 npx @wanjeans/session-memory install --repo-dir <local-repository-path>
 ```
 
+If the session is open inside the target project, run it from that project directory and the skill
+lands there. If you run it elsewhere, pass the target explicitly:
+
+```bash
+npx @wanjeans/session-memory install --repo-dir <local-repository-path> --project-dir <target-project-path>
+```
+
 Maintenance commands:
 
 ```bash
@@ -114,7 +123,7 @@ What `install` does (identical on every OS, idempotent, re-runnable):
 1. Links `~/.claude/projects/<encoded-project>/memory` → this repo's `memory/` (junction on Windows, symlink elsewhere);
 2. Adds one line `@<repo>/CLAUDE.md` to `~/.claude/CLAUDE.md` to import global rules;
 3. Merges `settings/settings.shared.json` into `~/.claude/settings.json` (backs up to `.bak` first);
-4. Links skills under `skills/` into Claude's `~/.claude/skills/` and Codex's `~/.agents/skills/` (incl. `session-memory`);
+4. Links skills under `skills/` into the target project's `.claude/skills/` and `.agents/skills/` (incl. `session-memory`); the default target is the current working directory, and the installer does **not** install Claude/Codex global skills;
 5. Installs **memory-sync** hooks: **SessionStart** pulls, **SessionEnd** commits & pushes the
    memory repo (the hook command is `node …/bin/session-memory.mjs sync`). (Session capture installs
    **no** hook — it's the manual `/session-memory save`; the installer also cleans up any legacy
@@ -124,7 +133,7 @@ What `install` does (identical on every OS, idempotent, re-runnable):
 
 ## Daily use
 - Memory sync is **automatic**: `git pull` on session start, `commit` + `push` on session end.
-- Session history is **manual**: in Claude run `/session-memory save|read|get`; in Codex run `$session-memory save|read|get`.
+- Session history is **manual**: first install the skill into the current target project; in Claude run `/session-memory save|read|get`, and in Codex run `$session-memory save|read|get`.
 - Memory and rule edits get committed alongside `memory/` and `CLAUDE.md`.
 - Manual fallback (sync the memory repo anytime, same on every OS):
   - `node bin/session-memory.mjs sync` (pull only: add `--pull-only`)
@@ -156,7 +165,7 @@ There is **no local Claude Code** on iPhone. Two viable paths:
 ├── memory/                   # File-based memory: MEMORY.md index + one file per fact
 ├── settings/settings.shared.json
 ├── skills/
-│   └── session-memory/       # Manual skill: save / read / get subcommands
+│   └── session-memory/       # Manual skill source: save / read / get subcommands
 ├── bin/session-memory.mjs    # CLI entry point (single entry for every command)
 └── lib/                      # Node implementation (one codebase, all platforms)
     ├── main.mjs              #   Command dispatch
@@ -186,7 +195,9 @@ CLI commands (see `node bin/session-memory.mjs --help`):
 
 Beyond syncing "memory", this repo provides a system that **distills each endpoint's agent
 sessions into project progress** (design: [DESIGN.md](DESIGN.md)). **Fully manual**, one skill
-`session-memory` with three subcommands (use `/session-memory <subcommand>` inside a target project):
+`session-memory` with three subcommands (first install it into the target project's `.claude/skills/`
+or `.agents/skills/`, then use `/session-memory <subcommand>` or `$session-memory <subcommand>` inside
+that project):
 
 - **`/session-memory save`** — saves sessions into **that project's** `session-history/`
   (digest + redacted transcript). It asks: save **all** endpoints' new sessions (scan Claude
