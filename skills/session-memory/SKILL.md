@@ -26,10 +26,10 @@ command works on Windows, macOS, and Linux (Node.js 20+ and git are the only req
 
 ## read — import sessions from other clients into the current client's list
 
-1. **List candidates:** `node "<repo>/bin/session-memory.mjs" read --list` returns a JSON array with base, tool, machine, and title.
-2. **Show the candidates to the user** and ask which ones to import (all is allowed). Identify the source client (`tool`) for each.
+1. **List candidates:** `node "<repo>/bin/session-memory.mjs" read --list` returns a JSON array with base, author, tool, machine, and title. Add `--author <handle>` to only show one person's sessions.
+2. **Show the candidates to the user** and ask which ones to import (all is allowed). Identify the source client (`tool`) and, in shared repositories, the person (`author`) for each.
 3. **Import:** `node "<repo>/bin/session-memory.mjs" read --import --ids <base1,base2,…> --targets cli,desktop`
-   - After import, the session appears in `claude --resume`; the Desktop sidebar gets a source-prefixed title such as `(codex) …`.
+   - After import, the session appears in `claude --resume`; the Desktop sidebar gets a source-prefixed title such as `(codex@alice) …`.
    - **Limits:** imports are same-OS only. Codex sources become placeholder sessions containing a summary and reference to the redacted transcript, not a faithful resume. Desktop import needs an existing `local_*.json` to infer the account directory; otherwise it is skipped.
 4. Report the import result, including files written and targets completed.
 
@@ -38,9 +38,9 @@ command works on Windows, macOS, and Linux (Node.js 20+ and git are the only req
 1. Refresh the branch/worktree index: `node "<repo>/bin/session-memory.mjs" repo-status`.
 2. Get aggregated data: `node "<repo>/bin/session-memory.mjs" build-status [--days N]` returns compact JSON grouped by branch.
 3. Read `memory/MEMORY.md` and relevant fact files.
-4. Write `session-history/STATUS.md`, covering each branch/worktree's work, recent sessions (time, client, files changed), ahead/behind state, outstanding threads, and next steps, then cross-branch observations. When a digest has an empty `summary`, infer one sentence from first_prompt, files, and next_steps.
+4. Write `session-history/STATUS.md`, covering each branch/worktree's work, who worked on it (`authors`), recent sessions (time, client, author, files changed), ahead/behind state, outstanding threads, and next steps, then cross-branch observations. When a digest has an empty `summary`, infer one sentence from first_prompt, files, and next_steps.
 
 ## Notes
 - Privacy: `transcripts/` are redacted on a best-effort basis. Do not treat `[REDACTED:*]` as a real value when quoting transcripts.
 - If `session-history/` does not exist, explain that the project has not been saved yet and direct the user to `/session-memory save` (Claude) or `$session-memory save` (Codex).
-- Cross-client/machine: a project can have multiple Windows/macOS and Claude/Codex digests; distinguish them by `tool` and `machine`.
+- Cross-client/machine/person: a project can have digests from multiple people, OSes, and clients; distinguish them by `author`, `tool`, and `machine`. Digests live under `session-history/digests/<author>/` (legacy flat files are still read).

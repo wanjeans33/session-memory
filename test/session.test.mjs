@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { installNative } from '../lib/commands/install.mjs';
 import { redact } from '../lib/util/redact.mjs';
 import { encodeProject, parseClaudeTranscript, relFiles, splitLines } from '../lib/util/transcript.mjs';
 
@@ -56,4 +60,38 @@ test('parseClaudeTranscript extracts metadata, turns, files, and tools', () => {
 
 test('relFiles makes paths relative to root with forward slashes', () => {
   assert.deepEqual(relFiles(['E:\\proj\\src\\a.js', 'E:\\other\\b.js'], 'E:\\proj'), ['src/a.js', 'E:/other/b.js']);
+});
+
+test('installNative installs skills into the target project, not global skill folders', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'session-memory-install-'));
+  const repo = path.join(root, 'memory-repo');
+  const project = path.join(root, 'target-project');
+  const home = path.join(root, 'home');
+
+  try {
+    mkdirSync(path.join(repo, '.git'), { recursive: true });
+    mkdirSync(path.join(repo, 'bin'), { recursive: true });
+    mkdirSync(path.join(repo, 'lib'), { recursive: true });
+    mkdirSync(path.join(repo, 'skills', 'session-memory'), { recursive: true });
+    mkdirSync(path.join(repo, 'settings'), { recursive: true });
+    mkdirSync(project, { recursive: true });
+
+    installNative(
+      repo,
+      {
+        home,
+        claudeDir: path.join(home, '.claude'),
+        codexSkillsDir: path.join(home, '.agents', 'skills'),
+      },
+      { projectDir: project }
+    );
+
+    const sourceSkill = path.join(repo, 'skills', 'session-memory');
+    assert.equal(realpathSync(path.join(project, '.claude', 'skills', 'session-memory')), realpathSync(sourceSkill));
+    assert.equal(realpathSync(path.join(project, '.agents', 'skills', 'session-memory')), realpathSync(sourceSkill));
+    assert.equal(existsSync(path.join(home, '.claude', 'skills', 'session-memory')), false);
+    assert.equal(existsSync(path.join(home, '.agents', 'skills', 'session-memory')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
