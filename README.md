@@ -200,6 +200,20 @@ CLI 命令一览（详见 `node bin/session-memory.mjs --help`）：
 > **平台**：实现为纯 Node（一套代码覆盖三端），只依赖 Node ≥ 20 与 git。Windows 已端到端验证；
 > macOS/Linux 走同一套代码与同样的命令，首次运行仍建议核对输出。
 
+### 多人协作（初步支持）
+
+同一个仓库可以由**多个人**协作沉淀会话（每人把 session 存入，其他人 `read`/`get` 获取上下文）：
+
+- 每条 digest 记录 `author`（默认取 `git config user.name`，可用环境变量 `SESSION_MEMORY_AUTHOR` 覆盖），
+  并按人落盘到 `session-history/digests/<author>/`、`transcripts/<author>/` —— 并发写入互不冲突；
+- `read --list` 输出 author 列，可 `--author <handle>` 过滤；导入标题带来源人标签 `(codex@alice) …`；
+- `get` 聚合时每条分支带 `authors`，STATUS.md 能回答"谁在哪条分支上干什么"；
+- memory-sync 只提交白名单路径（绝不 `add -A`），push 冲突自动 rebase 重试。
+
+> 注意：透明给团队 = 你的（脱敏后）会话原文对协作者可读。团队仓库务必私有，
+> 建议在 CI 加密钥扫描（如 gitleaks）。共享布局分层（shared/ + users/）与"团队模式默认只存
+> digest"在路线图 Phase 9b/9c（见 [DESIGN.md](DESIGN.md)）。
+
 ## 安全
 - **只用私有仓库。** `.gitignore` 排除 `.credentials.json`、`*.key`、`*.pem`、`*.token` 等。
 - 自检（应输出为空）：

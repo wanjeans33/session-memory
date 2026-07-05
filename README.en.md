@@ -222,6 +222,22 @@ Underlying implementation: `lib/commands/{save,read,repo-status,build-status}.mj
 > and git. Windows is end-to-end verified; macOS/Linux run the same code and the same commands —
 > still worth double-checking the output on your first run.
 
+### Multi-person collaboration (initial support)
+
+Several people can share one repository, each saving sessions in and reading the others' for context:
+
+- Every digest records an `author` (defaults to `git config user.name`, overridable with the
+  `SESSION_MEMORY_AUTHOR` env var) and lands under `session-history/digests/<author>/` and
+  `transcripts/<author>/`, so concurrent writers never conflict.
+- `read --list` shows the author column and supports `--author <handle>`; imported titles carry a
+  source-person tag like `(codex@alice) …`.
+- `get` aggregation includes per-branch `authors`, so STATUS.md answers "who is working on what".
+- memory-sync commits only whitelisted paths (never `add -A`) and retries a rejected push after a rebase.
+
+> Note: sharing with a team means your (redacted) transcripts are readable by collaborators. Keep the
+> team repo private and add a secret-scan CI (e.g. gitleaks). The shared layout split (shared/ + users/)
+> and digest-only team default are on the roadmap as Phase 9b/9c (see [DESIGN.md](DESIGN.md)).
+
 ## Security
 - **Use a private repo only** (for your data). `.gitignore` excludes `.credentials.json`,
   `*.key`, `*.pem`, `*.token`, etc.

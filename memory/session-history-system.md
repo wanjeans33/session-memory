@@ -23,3 +23,5 @@ metadata:
 **已删除**：旧的 `.ps1`/`.sh` 两套脚本（`scripts/` 整目录）、自动 SessionEnd 采集 hook、`enable-capture-here`、`SESSION_HISTORY_AUTOCOMMIT`、旧 `archive-sessions` 与 `session-sync` 技能、`session-share`（改名 session-memory）。memory-sync 的自动 hook 保留（命令改为 `node …/bin/session-memory.mjs sync`）。
 
 **状态（2026-06-27）**：Node CLI 在 Windows 端到端验证通过（save/repo-status/build-status/read 全链路 + 单元测试）；macOS/Linux 走同一套代码与命令，待本机核对。未做：Cloud 适配、跨 OS path-map（read 目前仅同 OS）。
+
+**多人协作（2026-07-05，第一阶段已实现）**：digest schema v2 增 `author`（`SESSION_MEMORY_AUTHOR` env → `git config user.name` → OS 用户名，`lib/util/author.mjs`），落盘按人分目录 `digests/<author>/`；sync 只提交白名单路径（不再 `add -A`）+ push 被拒自动 rebase 重试；`read --list` 带 author 列与 `--author` 过滤，导入标签 `(tool@author)`；`build-status` 每分支带 `authors`。待做（DESIGN.md Phase 9b–9d）：shared/users 布局分层、team 模式默认只存 digest + gitleaks CI、MEMORY.md 索引生成化。

@@ -16,6 +16,18 @@
 1. **存储位置 = 嵌入每个目标项目仓库**。记录落在 `<project>/session-history/`，随项目一起被 git 管理。
 2. **隐私 = digest + 脱敏后的原文**。提交前对 transcript 跑密钥扫描/脱敏（best-effort，见 §5）。
 
+## 已定决策（2026-07-05，多人协作第一阶段）
+
+7. **身份层**：每条 digest 记录 `author`（解析顺序：`SESSION_MEMORY_AUTHOR` 环境变量 →
+   `git config user.name` → OS 用户名，规范化为 kebab handle，见 `lib/util/author.mjs`）。
+8. **digest schema 升为 2**：新增 `author` 字段；落盘按人分目录
+   `digests/<author>/`、`transcripts/<author>/`（并发写互不接触；旧扁平布局仍可读）。
+9. **sync 并发安全**：memory-sync 不再 `git add -A`，只提交白名单路径
+   （`CLAUDE.md`、`AGENTS.md`、`memory/`、`settings/`、`shared/`、`users/`、`sessions/`）；
+   push 被拒时自动 `pull --rebase` 重试（至多 3 次）。
+10. **read/get 多人化**：`read --list` 递归扫描并输出 `author` 列，支持 `--author <handle>` 过滤；
+    导入标题标签带来源人 `(codex@alice) …`；`build-status` 每分支输出 `authors` 汇总。
+
 ## 已定决策（2026-06-23，交互改为手动命令）
 3. **取消一切自动触发**：删除 SessionEnd 采集 hook、删除 skill 的 description 自动触发。
 4. **统一为一个手动 skill `session-memory`，三个子命令**：`save`（存会话，问全部/仅当前）、`read`（把其它端会话导入当前端 CLI+Desktop 列表、标题打来源标签）、`get`（综合 STATUS.md，即原 session-share）。
@@ -45,10 +57,12 @@
 
 ```
 <project-root>/session-history/
-├── digests/                       # 一会话一文件，append-only（天然无并发冲突）
-│   └── 2026-06-17_153012-claude-18f57795.json
-├── transcripts/                   # 脱敏后的原始记录（可全文检索）
-│   └── 2026-06-17_153012-claude-18f57795.jsonl
+├── digests/                       # 一会话一文件，append-only；按 author 分目录（并发/多人无冲突）
+│   └── <author>/
+│       └── 2026-06-17_153012-claude-18f57795.json
+├── transcripts/                   # 脱敏后的原始记录（可全文检索），同样按 author 分目录
+│   └── <author>/
+│       └── 2026-06-17_153012-claude-18f57795.jsonl
 ├── index.json                     # 分支/worktree 状态快照（由 repo-status 生成）
 └── STATUS.md                      # 人读项目状态（由 get 生成）
 ```
@@ -70,10 +84,11 @@
 
 ```jsonc
 {
-  "schema": 1,
+  "schema": 2,
   "id": "18f57795-3e91-4acf-88e5-a4fede8e2351",   // 原会话 id
   "tool": "claude-cli",            // claude-cli | claude-desktop | codex | cloud
   "origin": "codex_vscode",        // 细分来源（可空）：vscode / cli / desktop
+  "author": "alice",               // 谁存的（v2 新增；决定 digests/<author>/ 落盘位置）
   "machine": "windows-desktop",    // 主机名
   "os": "windows",                 // windows | macos | linux
   "project": "claude-session-memory",
@@ -191,5 +206,14 @@ description 写成"仅显式调用"以**不自动触发**。三个子命令：
 - **Phase 6** 硬化：密钥扫描 CI、跨 OS path-map、并发回归。
 - **Phase 7** ✅ 交互重构：取消自动触发；统一手动 skill `session-memory`（save/read/get）；新增 read 跨端导入。
 - **Phase 8** ✅ 实现重写：`.ps1`/`.sh` 全部移植为一套 Node CLI（`bin/session-memory.mjs` + `lib/`），三端同源；install/sync/采集/索引均原生 Node，去除 jq / PowerShell / bash 依赖。
+- **Phase 9** 多人协作。第一阶段 ✅（2026-07-05）：author 身份层 + digest schema v2 +
+  `digests/<author>/` 命名空间；sync 白名单提交 + push 重试；read/get 带 author。后续待做：
+  - **9b 布局分层**：记忆仓库改为 `shared/`（团队规则/事实，PR 修改）+ `users/<handle>/`
+    （个人 CLAUDE.md/memory，只有本人自动同步）+ `sessions/<project>/<handle>/`（集中会话账本，
+    feature 分支上的会话对团队即时可见）；install 增加 `--user`，import 双行
+    （shared + users/<me>），memory junction 指向 `users/<me>/memory/`。
+  - **9c 团队隐私默认值**：`session-memory.config.json`（`mode: personal|team`）；team 模式下
+    `save` 默认只存 digest（`--with-transcript` 才存原文）；模板自带 gitleaks CI workflow。
+  - **9d MEMORY.md 去冲突**：索引由 CLI 扫 frontmatter 生成（或 `.gitattributes merge=union` 兜底）。
 
-> 已交付：Phase 0–5 + 7 + 8（Desktop 已含；Cloud、跨 OS path-map 待做）。
+> 已交付：Phase 0–5 + 7 + 8 + 9 第一阶段（Desktop 已含；Cloud、跨 OS path-map、9b–9d 待做）。
