@@ -1,46 +1,99 @@
 ---
 name: session-memory
-description: Manual session-memory workflow with save, read, and get subcommands. Use it only when the user explicitly invokes Claude's `/session-memory save|read|get`, Codex's `$session-memory save|read|get`, or explicitly asks to run session-memory's save/read/get command. Do not activate it merely because the user mentions progress or saving sessions.
+description: Manual project session continuity for Claude Code, Claude Desktop, and Codex with save, read, and get. Use only when the user explicitly invokes `/session-memory save|read|get`, `$session-memory save|read|get`, or explicitly asks to run one of those session-memory operations. Do not activate merely because the user mentions progress, history, or memory.
 ---
 
-# session-memory — manual session memory workflow (save / read / get)
+# session-memory
 
-**Manual invocation only.** Follow the corresponding flow only when the user explicitly invokes Claude's `/session-memory <subcommand>` or Codex's `$session-memory <subcommand>`.
-Do not trigger automatically. If the user merely mentions progress or memory, tell Claude users they can run `/session-memory get` and Codex users they can run `$session-memory get`; do not run it yourself.
+Run this workflow only after an explicit `save`, `read`, or `get` request. Resolve this repository as `<session-memory-repo>`, then run its Node 20+ CLI from the target project:
 
-The workflow is implemented by the cross-platform Node CLI shipped with this repository.
-First determine `<repo>`, the installation path of this claude-session-memory repository, then run
-`node "<repo>/bin/session-memory.mjs" <command>` from the target project's directory. The same
-command works on Windows, macOS, and Linux (Node.js 20+ and git are the only requirements).
+```text
+node "<session-memory-repo>/bin/session-memory.mjs" <command>
+```
 
----
+Treat the current checkout from `git rev-parse --show-toplevel` as the project root. In a linked worktree, operate on that worktree and branch. Read [DESIGN.md](../../DESIGN.md) only when debugging identity, conflict, migration, or integrity behavior.
 
-## save — store sessions in this project's session-history/
+## save
 
-1. **Ask for scope first:** “Save new sessions from **all** clients, or only the **current** session?”
-2. Run the matching command from the target project's directory:
-   - Current only: `node "<repo>/bin/session-memory.mjs" save`
-   - All: `node "<repo>/bin/session-memory.mjs" save --all` (scans Claude CLI/Desktop and Codex)
-3. To commit as well, add `--commit`; it is meaningful only with the default (current-session) scope.
-4. Report the command output, including every digest written.
+If the user did not choose current or all sessions, ask which scope they want. Run:
+```text
+node "<session-memory-repo>/bin/session-memory.mjs" save --current
+node "<session-memory-repo>/bin/session-memory.mjs" save --all
+```
 
-## read — import sessions from other clients into the current client's list
+- Add stable identity when needed: `--author <handle> --actor <id> --device <id> --role <role>`.
+- For an exact Codex source, use runtime `CODEX_THREAD_ID` / `CODEX_SESSION_ID` or
+  `--codex-session-id <id>`. Treat missing IDs and another checkout as errors; never fall back.
+- Keep `save --all` inside the current checkout; exclude other projects and sibling worktrees.
+- Treat a canonical hash in the current project history as unchanged; a schema-4 import is unchanged
+  only when current content and its marker/revision verify there. Exclude pure control turns.
+- Preserve the embedded `logical_id` for continuations. If content extends no stored revision, stop
+  and require `read` of the intended branch instead of guessing a parent.
+- Use `--commit` only when asked to commit `session-history/`. Use `--publish` only when asked to push
+  the current branch. Report save, commit, and push separately.
+- Do not combine `save --all` with `--commit` or `--publish`.
 
-1. **List candidates:** `node "<repo>/bin/session-memory.mjs" read --list` returns a JSON array with base, author, tool, machine, and title. Add `--author <handle>` to only show one person's sessions.
-2. **Show the candidates to the user** and ask which ones to import (all is allowed). Identify the source client (`tool`) and, in shared repositories, the person (`author`) for each.
-3. **Import:** `node "<repo>/bin/session-memory.mjs" read --import --ids <base1,base2,…> --targets cli,desktop`
-   - After import, the session appears in `claude --resume`; the Desktop sidebar gets a source-prefixed title such as `(codex@alice) …`.
-   - **Limits:** imports are same-OS only. Codex sources become placeholder sessions containing a summary and reference to the redacted transcript, not a faithful resume. Desktop import needs an existing `local_*.json` to infer the account directory; otherwise it is skipped.
-4. Report the import result, including files written and targets completed.
+Report selected sources, new logical/revision IDs and paths, unchanged counts, failures, and Git
+outcomes. Never call a local save published unless push succeeds.
 
-## get — generate the consolidated project status (STATUS.md)
+## read
 
-1. Refresh the branch/worktree index: `node "<repo>/bin/session-memory.mjs" repo-status`.
-2. Get aggregated data: `node "<repo>/bin/session-memory.mjs" build-status [--days N]` returns compact JSON grouped by branch.
-3. Read `memory/MEMORY.md` and relevant fact files.
-4. Write `session-history/STATUS.md`, covering each branch/worktree's work, who worked on it (`authors`), recent sessions (time, client, author, files changed), ahead/behind state, outstanding threads, and next steps, then cross-branch observations. When a digest has an empty `summary`, infer one sentence from first_prompt, files, and next_steps.
+First ensure the current checkout already contains the desired `session-history/` state. Do not
+auto-pull, stash, rebase, or discard local changes.
 
-## Notes
-- Privacy: `transcripts/` are redacted on a best-effort basis. Do not treat `[REDACTED:*]` as a real value when quoting transcripts.
-- If `session-history/` does not exist, explain that the project has not been saved yet and direct the user to `/session-memory save` (Claude) or `$session-memory save` (Codex).
-- Cross-client/machine/person: a project can have digests from multiple people, OSes, and clients; distinguish them by `author`, `tool`, and `machine`. Digests live under `session-history/digests/<author>/` (legacy flat files are still read).
+Unless the user chose a scope, ask for `mine` or `team`, then list candidates:
+```text
+node "<session-memory-repo>/bin/session-memory.mjs" read --list --scope mine
+node "<session-memory-repo>/bin/session-memory.mjs" read --list --scope team
+```
+
+Import selected or all candidates:
+```text
+node "<session-memory-repo>/bin/session-memory.mjs" read --import --ids <logical-id,...> --targets claude-code,codex --scope team
+node "<session-memory-repo>/bin/session-memory.mjs" read --import --all --targets desktop --scope mine
+```
+
+Use source filters `--owner`, `--source-author`, and `--source-role`; legacy data without an actor uses
+owner name for `mine` / `--owner`. Invalid filters fail closed. `--revision` requires exactly one ID.
+
+Enforce these upsert rules:
+
+- no native match: create one with a schema-4 marker;
+- target revision/content already present: skip;
+- native content equals any stored revision: update the same native ID in place;
+- native content equals no stored revision: block as unsaved continuation;
+- multiple heads: block until the user supplies `--revision`.
+
+The CLI has no force-copy option. Never duplicate for sidebar ordering; verify by native ID. Use a markerless
+legacy replica only on one content match; otherwise warn/ignore it and let `read` create a marked copy—never guess by position.
+
+There is no five-session cap. Eleven distinct selected, conflict-free sessions must remain eleven
+through save-all, list, and import-all; report every filter, missing source, conflict, and scan error.
+
+Report created, updated, already-current, blocked, and missing counts plus written paths/native IDs.
+
+## get
+
+Run:
+
+```text
+node "<session-memory-repo>/bin/session-memory.mjs" repo-status
+node "<session-memory-repo>/bin/session-memory.mjs" build-status [--days N]
+```
+
+Read `memory/MEMORY.md` and only relevant fact files if present. Write
+`session-history/STATUS.md` with checkout state, owners/contributors, logical sessions, heads, recent
+revisions, files changed, and next steps. Aggregate by logical session.
+
+## Safety
+
+- Treat `session-history/v4` canonical events and revision metadata as the only new write model. It
+  has no `project.json`, replicas, checkpoints, or imported line count.
+- Keep schema 1/2/3 read-only; merge v3/v4 as one DAG so the first v4 continuation may parent to v3 without hiding old heads.
+- Surface malformed data and all scan errors except a genuinely missing directory. Never accept a
+  plausible partial result.
+- Keep ledger/native writes under their real roots, reject traversal and link escapes, use atomic
+  replacement, and never modify Codex SQLite.
+- Respect the checkout-scoped write lock. After an abnormal exit, verify no writer remains before
+  deleting the exact stale lock reported by the CLI.
+- Treat redaction as best effort and `mine|team` as selection, not access control.

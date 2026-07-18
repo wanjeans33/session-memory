@@ -1,162 +1,174 @@
-# claude-session-memory
+# session-memory
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![platform](https://img.shields.io/badge/Windows-%E2%9C%85%20tested-success)
-![platform](https://img.shields.io/badge/macOS%20%2F%20Linux-Node-blue)
 ![node](https://img.shields.io/badge/Node.js-%E2%89%A520-339933)
 
 **中文** · [English](README.en.md)
 
-把 Claude Code / Codex 的「会话进度」和「记忆」变成 git 里可同步、可共享的资产。两种用法，按需选择：
+把 Claude Code、Claude Desktop 和 Codex 的项目会话放进 Git，并在别的客户端或设备继续。
 
-| 用法 | 解决什么 | 怎么装 | 需要什么仓库 |
-|---|---|---|---|
-| **A. 项目会话共享**（团队/多端） | 每次会话沉淀成进度记录，同事和其它端随时接上上下文 | clone 本仓库 → 给目标项目装 skill（一条命令） | 直接用本公开仓库即可 |
-| **B. 个人记忆同步**（多机自动） | `CLAUDE.md` 规则 + `memory/` 事实跨 Mac / Windows / iPhone 自动同步 | 从模板建**私有**仓库 → 完整安装 | 必须自己的**私有**仓库 |
+schema 4 只做三件事：
 
-> 🟢 全部逻辑为一套 Node CLI（`bin/session-memory.mjs`），Windows / macOS / Linux 同源，
-> 只依赖 **Node ≥ 20** 与 **git**。无需 PowerShell / bash / jq。
+1. 把原生 transcript 归一化为 canonical events；
+2. 用稳定的 `logical_id` 表示同一段对话，用不可变 revision 表示每次变化；
+3. `read` 把某个 revision 写回目标客户端，并嵌入一个小型 marker。
 
----
+同一语义内容的 hash 已存在于当前项目历史时，`save` 是 no-op。`read` 后没有继续对话，再
+`save` 也不会重复写入。只有出现新的真实用户内容，才会在原 `logical_id` 下新增 revision。
 
-## 用法 A：给项目开启会话共享（最快上手）
+`$session-memory save` / `/session-memory save` 这类纯控制轮及其工具、确认输出不算会话内容；同一
+条消息里若还有真实任务，则真实任务仍会保存。
 
-直接 clone 本公开仓库即可——skills-only 安装**不会**把你的任何个人数据写进这个 clone：
+要求：Node.js 20+、Git。所有项目命令都以当前 checkout 的
+`git rev-parse --show-toplevel` 为根；linked worktree 使用自己的分支和 `session-history/`。
+
+## 安装
+
+只启用项目会话能力：
 
 ```bash
 git clone https://github.com/wanjeans33/session-memory
 cd session-memory
-node bin/session-memory.mjs install --skills-only --project-dir <目标项目路径>
+node bin/session-memory.mjs install --skills-only --project-dir <目标项目>
 ```
 
-这会把 `session-memory` skill 链接进目标项目的 `.claude/skills/` 与 `.agents/skills/`。
-之后在**目标项目**里开新会话，Claude 用 `/session-memory <子命令>`，Codex 用 `$session-memory <子命令>`：
+这会链接：
 
-- **`save`** — 把会话存进该项目的 `session-history/`（digest + 脱敏原文）。会问你存**全部**端的新会话
-  （扫 Claude CLI/Desktop + Codex）还是只存**当前**这个；`--commit` 可顺手提交。
-- **`read`** — 把 `session-history/` 里**其他人/其它端**的会话导入**当前端**列表
-  （CLI `claude --resume` 可见 + Desktop sidebar），标题带来源标签如 `(codex@alice) …`。
-- **`get`** — 综合 digest + 分支/worktree 索引 + `memory/`，生成 `STATUS.md`：
-  谁在哪条分支做什么、最近会话、未完成线索、下一步。
+- Claude Code：`/session-memory save|read|get`
+- Codex：`$session-memory save|read|get`
 
-`session-history/` 随**目标项目**的 git 仓库走：成员正常 push / pull 项目代码，会话进度就同步了。
-
-**多人协作要点**（设计详见 [DESIGN.md](DESIGN.md)）：
-
-- 每条记录带 `author`（默认取 `git config user.name`，环境变量 `SESSION_MEMORY_AUTHOR` 可覆盖），
-  按人落盘到 `session-history/digests/<author>/`——多人并发写入**互不冲突**；
-- `read --list` 输出 author 列，可 `--author <handle>` 过滤；
-- `get` 每条分支带 `authors` 汇总，STATUS.md 直接回答"谁在干什么"。
-
-> ⚠️ **隐私**：`save` 的原文只做 **best-effort 脱敏**（密钥/令牌 → `[REDACTED:*]`），不可能 100% 覆盖，
-> 且对项目协作者可读。**目标项目仓库务必私有**，建议在 CI 加密钥扫描（如 gitleaks）兜底。
-
-### 为什么是「进度记录」而不是跨系统 resume
-各 OS 把项目绝对路径编码成不同目录名（`E:\proj` → `E--proj` vs `/Users/x/proj`），且记录内嵌绝对路径，
-同一段对话在另一台机器上无法被识别为可继续会话。所以我们沉淀**可检索的 digest**，用 `read`/`get` 接上上下文
-（`read` 导入目前仅限同 OS）。
-
----
-
-## 用法 B：个人记忆跨设备自动同步
-
-### 0. 从模板创建你自己的**私有**仓库
-点本仓库的 **Use this template → Create a new repository**，**Visibility 选 Private**。
-
-> ⚠️ **为什么必须私有**：完整安装后，memory-sync 钩子会把你的 `CLAUDE.md` / `memory/` 个人事实
-> **自动 commit + push** 到这个仓库。绝不能是公开仓库，更不能是本模板。
-> 不想用模板也可以从零建：`git init` 后 `gh repo create <名字> --private --source . --push`。
-
-### 1. 每台机器上安装
+也可从目标项目直接运行：
 
 ```bash
-git clone <你的私有仓库地址> ~/claude-session-memory   # Windows 路径随意
-cd ~/claude-session-memory
-node bin/session-memory.mjs install --project-dir <目标项目路径>
+node "<session-memory仓库>/bin/session-memory.mjs" <command>
 ```
 
-`install` 做了什么（三端一致、幂等、可重复运行）：
+## 最短工作流
 
-1. 把 `~/.claude/projects/<编码项目名>/memory` 链接到本仓库 `memory/`（Windows 用 junction 免管理员，其它用符号链接）；
-2. 在 `~/.claude/CLAUDE.md` 写入 `@<仓库>/CLAUDE.md` import，全局规则对所有项目生效；
-3. 把 `settings/settings.shared.json` 合并进 `~/.claude/settings.json`（先备份 `.bak`）；
-4. 同用法 A：把 skills 链接进目标项目（`--skills-only` 即只做这一步）；
-5. 安装 **memory-sync** hooks：SessionStart 自动拉取、SessionEnd 自动提交推送记忆仓库。
-   同步只提交白名单路径（绝不 `git add -A`），push 冲突自动 rebase 重试。
-
-### 可选：npm CLI
-
-公开的 npm CLI 只负责安装/维护流程，**不会**上传你的个人记忆：
+设备 A 保存并发布当前会话：
 
 ```bash
-npx @wanjeans/session-memory init --repo-url <你的私有仓库地址>   # 首次：clone + 安装
-npx @wanjeans/session-memory install --repo-dir <本地仓库路径>     # 已有 clone
-npx @wanjeans/session-memory doctor                               # 自检
-npx @wanjeans/session-memory update                               # 升级
+node "<repo>/bin/session-memory.mjs" save --publish
 ```
 
-所有改动本机的命令都支持 `--dry-run` 预览。
+设备 B 用正常 Git 流程更新项目，再列出和导入：
 
-### 日常使用
-- 记忆同步**零操作**：开会话自动 `git pull`，结束自动 `commit + push`。
-- 手动兜底：`node bin/session-memory.mjs sync`（仅拉取加 `--pull-only`）。
-- 会话历史仍是**手动**的（见用法 A 的 save / read / get）。
-
-### iPhone
-iPhone 上没有本地 Claude Code，两条路径：
-
-1. **Remote Control** —— Claude iOS App 接管你 Mac/Windows 上的会话，自动使用那台机器已同步的记忆。
-2. **云端**（claude.ai/code）—— 云端 VM 克隆你的私有仓库并读取 `CLAUDE.md` 和 `memory/`。
-   注意 `MEMORY.md` 仅自动加载前 ~200 行 / 25KB；云端看不到你本地的 `~/.claude`。
-
----
-
-## 同步内容一览
-
-| 数据 | 去哪 | 说明 |
-|---|---|---|
-| `CLAUDE.md`（规则/偏好） | 记忆仓库（用法 B） | 各机器经 `@import` 引用 |
-| `memory/`（MEMORY.md + 事实文件） | 记忆仓库（用法 B） | 软链接/junction 就地读写 |
-| `settings/settings.shared.json` | 记忆仓库（用法 B） | 精选可移植设置，合并进本机 |
-| `session-history/`（digest + 脱敏原文） | **目标项目**仓库（用法 A） | 按项目、按 author 落盘 |
-| 凭据 `.credentials.json` 等 | ❌ 永不同步 | `.gitignore` 排除 |
-
-## 目录结构与 CLI
-
-```
-.
-├── CLAUDE.md                 # 全局规则/偏好（用法 B 被同步）
-├── DESIGN.md                 # 架构与 digest schema
-├── memory/                   # 文件式记忆：MEMORY.md 索引 + 每条事实一个文件
-├── settings/settings.shared.json
-├── skills/session-memory/    # 手动 skill：save / read / get
-├── bin/session-memory.mjs    # CLI 入口
-└── lib/                      # Node 实现（commands / capture / util）
+```bash
+git pull
+node "<repo>/bin/session-memory.mjs" read --list --scope team
+node "<repo>/bin/session-memory.mjs" read --import --ids <logical-id> --targets codex --scope team
 ```
 
-| 命令 | 作用 |
+在导入的原生 session 中继续对话，再运行 `save`。marker 会让新 revision 回到原来的
+`logical_id`，不会另起一条逻辑会话。
+
+`read` 不会自动 pull、stash、rebase 或丢弃工作树修改。
+
+## save
+
+```bash
+node "<repo>/bin/session-memory.mjs" save --current
+node "<repo>/bin/session-memory.mjs" save --all
+node "<repo>/bin/session-memory.mjs" save --current --codex-session-id <native-id>
+```
+
+- 默认保存当前 checkout 中的当前 session。
+- 若运行时提供 `CODEX_THREAD_ID` / `CODEX_SESSION_ID`，必须精确匹配；显式 native ID 不存在或
+  属于其他 checkout 时直接失败，不回退到另一条 session。
+- `save --all` 扫描所有受支持客户端，但只保存 cwd 属于当前 checkout 的 session。
+- canonical content hash 已存在于当前项目历史：0 个新 revision。
+- schema-4 marker 指向的 revision/hash 可在当前项目历史验证，且 hash 与当前内容相同：0 个新 revision。
+- 内容延续某个已存 revision：写入一个不可变子 revision。
+- 内容不延续任何已存 revision：停止并要求先 `read` 正确分支，不猜父节点。
+
+`save` 只写本地；`--commit` 只提交 `session-history/`；`--publish` 再 push 当前分支。三种结果
+分别报告。`save --all` 不与 `--commit` / `--publish` 组合。
+
+## read
+
+```bash
+node "<repo>/bin/session-memory.mjs" read --list --scope mine
+node "<repo>/bin/session-memory.mjs" read --list --scope team
+node "<repo>/bin/session-memory.mjs" read --import --all --targets claude-code,codex --scope team
+```
+
+`read` 靠 schema-4 marker 或已存 revision 的 `(tool, native_session_id)` 识别原生文件，不维护项目侧 replica/binding/checkpoint。
+无 marker 的旧副本仅在恰好匹配一条 legacy 会话时识别；0 或多条匹配会警告并忽略，随后可新建带 marker 的副本，绝不按位置猜测。
+
+每个目标的 upsert 规则：
+
+- 不存在：创建原生 session，并嵌入 schema-4 marker；
+- 已是目标 revision 或 canonical content hash 相同：跳过；
+- 当前内容恰好是任一已存 revision：视为 clean，保留 native ID 原地更新；
+- 当前内容不属于任何已存 revision：视为未保存 continuation，阻止覆盖；
+- 有多个 head：阻止自动选择，必须对一个 `logical_id` 使用 `--revision <revision-id>`。
+
+不存在强制复制选项；重复导入不会通过额外副本解决侧边栏排序或分页。
+
+`read --list` 返回逻辑 ID、选择的 revision、owner、来源、head、冲突状态和当前原生 ID。`--pending`
+只表示当前 Codex native store 没有匹配项，不等于导入失败。客户端侧边栏可能只显示最近子集，需按
+输出的 native ID 验证。
+
+没有 5 条或其他内部上限。11 条不同且无冲突的逻辑会话经过
+`save --all → read --list --scope team → read --import --all` 后仍应是 11 条；任何过滤、缺失或冲突
+都必须明确报告。
+
+## 数据模型
+
+```text
+session-history/
+└── v4/sessions/<logical-id>/
+    ├── events/<revision-id>.jsonl
+    └── revisions/<revision-id>.json
+```
+
+- `logical_id`：项目内稳定的对话身份。新原生会话由 canonical client + native ID 确定；导入后
+  由 marker 跨客户端延续。
+- events：不可变的 `user_message`、`assistant_message`、`tool_call`、`tool_result`。
+- revision metadata：父 revision、不可变 owner、作者/角色/设备/来源、event 数和 content hash。
+- head：由 parent 引用推导，没有可变的 `latest` 文件。
+
+项目中不再写 `project.json`、`replicas/`、checkpoint 或 `imported_line_count`。schema-4 marker 只携带
+逻辑/版本/内容身份及来源元数据，原生文件仍由各客户端拥有。
+
+## 身份、范围与冲突
+
+建议为多人/多设备配置：
+
+```bash
+node "<repo>/bin/session-memory.mjs" save \
+  --author alice --actor alice --device alice-laptop --role developer
+```
+
+对应环境变量为 `SESSION_MEMORY_AUTHOR`、`SESSION_MEMORY_ACTOR_ID`、
+`SESSION_MEMORY_DEVICE_ID`、`SESSION_MEMORY_ROLE`。handle 会做 NFKC、转小写，支持 Unicode
+字母/数字和 `._-`；纯 emoji/标点的显式值会失败。
+
+`mine` 按不可变 owner 过滤，`team` 选择仓库中全部会话；legacy 没有 actor 时，`mine` / `--owner`
+回退比较 owner 名称。它们不是权限控制。来源筛选另有 `--source-author`、`--source-role`。两台设备
+从同一 revision 各自继续会形成两个 head，不会自动拼接或覆盖；导入时用 `--revision` 明确选一个。
+
+## 兼容与安全
+
+- schema 1/2/3 只读兼容；schema 4 是唯一新写格式。v3 与 v4 revision 合并为同一 DAG，首次 v4
+  continuation 可 parent 到 v3，其他旧 head 不会被隐藏。旧文件不删除、不原地改写。
+- canonical events 和 revision metadata 会提交到项目仓库；内容仅做 best-effort 脱敏，敏感项目
+  应使用私有仓库和 secret scanning。
+- ledger 与 native store 写入都检查 realpath、拒绝路径穿越和 symlink/junction 逃逸，并通过同目录
+  临时文件 + rename 原子替换。Codex SQLite 不会被修改。
+- 写操作使用按 checkout realpath 区分的进程锁；异常退出留下 stale lock 时，先确认无 writer，
+  再删除错误消息给出的精确锁文件。
+- 扫描只忽略不存在的目录（`ENOENT`）；权限、`ENOTDIR` 和其他 I/O 错误会失败，不能把 11 条
+  悄悄报告成 5 条。
+
+## 其他命令
+
+| 命令 | 用途 |
 |---|---|
-| `install [--skills-only] [--project-dir …]` | 安装（skills-only = 只给项目装 skill） |
-| `init` / `update` / `doctor` | clone 接入 / 升级 / 自检 |
-| `sync [--pull-only]` | 记忆同步（hook 自动调用） |
-| `save [--all] [--commit]` | 会话采集入 `session-history/` |
-| `read --list [--author …] \| --import --ids …` | 列出 / 导入其他人与其它端的会话 |
-| `repo-status` / `build-status` | 分支索引 + 按分支聚合（供 `get` 消费） |
+| `repo-status` | 写入分支/worktree 索引 |
+| `build-status [--days N]` | 按逻辑会话输出项目状态 |
+| `get` skill 流程 | 生成 `session-history/STATUS.md` |
+| `doctor` / `update` | 检查或更新安装 |
 
-完整参数见 `node bin/session-memory.mjs --help`。
-
-## 平台支持
-
-| 平台 | 状态 |
-|---|---|
-| Windows | ✅ 端到端验证（junction 免管理员） |
-| macOS / Linux | ✅ 同一套 Node 代码（符号链接） |
-| iPhone | ✅ 经 Remote Control / 云端（见用法 B） |
-
-## 安全
-- 存个人记忆（用法 B）与团队会话（用法 A 的目标项目）的仓库**都必须私有**。
-- `.gitignore` 排除 `.credentials.json`、`*.key`、`*.pem`、`*.token` 等；**绝不要**提交令牌/密钥。
-- 自检（应输出为空）：
-  ```bash
-  git log --all --full-history -- '**/.credentials.json'
-  ```
+完整参数：`node bin/session-memory.mjs --help`。个人 `CLAUDE.md` / `memory/` 同步是独立的可选模式；
+不使用 `--skills-only` 的完整安装才会启用它。
